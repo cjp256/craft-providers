@@ -74,14 +74,12 @@ class Executor(ABC):
     def pull(self, *, source: pathlib.Path, destination: pathlib.Path) -> None:
         """Copy source file/directory from environment to host destination.
 
-        Standard "cp -r" rules apply:
-        - if source is directory, copy happens recursively.
-        - if destination exists, source will be copied into destination.
-
         Providing this as an abstract method allows the provider to implement
         the most performant option available.
 
-        :param source: Target directory to copy from.
+        The destination must be an existing directory.
+
+        :param source: Target environment file/directory to copy.
         :param destination: Host destination directory to copy to.
         """
 
@@ -89,13 +87,11 @@ class Executor(ABC):
     def push(self, *, source: pathlib.Path, destination: pathlib.Path) -> None:
         """Copy host source file/directory into environment at destination.
 
-        Standard "cp -r" rules apply:
-        - if source is directory, copy happens recursively.
-        - if destination exists, source will be copied into destination.
-
         Providing this as an abstract method allows the provider to implement
         the most performant option available.
 
-        :param source: Host directory to copy.
-        :param destination: Target destination directory to copy to.
+        The destination must be an existing directory.
+
+        :param source: Host file/directory to copy.
+        :param destination: Target environment destination directory to copy to.
         """
