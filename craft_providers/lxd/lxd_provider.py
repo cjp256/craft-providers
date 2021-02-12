@@ -150,14 +150,14 @@ class LXDProvider:
         # If it doesn't exist, launch a fresh instance.
         if not instance.exists():
             # Create from snapshot, if available.
-            if self._has_compatible_snapshot(
+            if use_snapshots and self._has_compatible_snapshot(
                 snapshot_name=snapshot_name, project=project, remote=remote
             ):
                 logger.info(f"Using compatible snapshot {snapshot_name!r}.")
                 image_name = snapshot_name
                 image_remote = "local"
 
-                # Using a snapshot image, don't re-publish.
+                # Using a compatible snapshot image, don't re-publish.
                 use_snapshots = False
 
             instance.launch(
@@ -174,6 +174,7 @@ class LXDProvider:
 
             # Publish snapshot if not ephemeral (snapshotting may fail on ephemeral).
             if use_snapshots and not ephemeral:
+                print("use snapshots:", use_snapshots)
                 self._publish_snapshot(
                     snapshot_name=snapshot_name,
                     instance=instance,

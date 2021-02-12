@@ -165,13 +165,13 @@ class LXDInstance(Executor):
 
         return None
 
-    def is_mounted(self, *, source: pathlib.Path, destination: pathlib.Path) -> bool:
+    def is_mounted(self, *, host_source: pathlib.Path, target: pathlib.Path) -> bool:
         """Check if path is mounted at target.
 
-        :param source: Host path to check.
-        :param destination: Instance path to check.
+        :param host_source: Host path to check.
+        :param target: Instance path to check.
 
-        :returns: True if source is mounted at destination.
+        :returns: True if host_source is mounted at target.
         """
         devices = self.lxc.config_device_show(
             instance_name=self.name, project=self.project, remote=self.remote
@@ -179,8 +179,8 @@ class LXDInstance(Executor):
         disks = [d for d in devices.values() if d.get("type") == "disk"]
 
         return any(
-            disk.get("path") == destination.as_posix()
-            and disk.get("source") == source.as_posix()
+            disk.get("path") == target.as_posix()
+            and disk.get("host_source") == host_source.as_posix()
             for disk in disks
         )
 
@@ -226,7 +226,7 @@ class LXDInstance(Executor):
             remote=self.remote,
         )
 
-    def mount(self, *, source: pathlib.Path, destination: pathlib.Path) -> None:
+    def mount(self, *, host_source: pathlib.Path, target: pathlib.Path) -> None:
         """Mount host source directory to target mount point.
 
         Checks first to see if already mounted.
@@ -234,13 +234,13 @@ class LXDInstance(Executor):
         :param source: Host path to mount.
         :param destination: Instance path to mount to.
         """
-        if self.is_mounted(source=source, destination=destination):
+        if self.is_mounted(host_source=host_source, target=target):
             return
 
         self.lxc.config_device_add_disk(
             instance_name=self.name,
-            source=source,
-            destination=destination,
+            source=host_source,
+            destination=target,
             project=self.project,
             remote=self.remote,
         )

@@ -55,7 +55,7 @@ class Multipass:
     :param multipass_path: Path to multipass command to use.
     """
 
-    def __init__(self, *, multipass_path: pathlib.Path) -> None:
+    def __init__(self, *, multipass_path: pathlib.Path = pathlib.Path("multipass")) -> None:
         self.multipass_path = multipass_path
 
     def _run(  # pylint: disable=redefined-builtin
@@ -126,8 +126,8 @@ class Multipass:
         """
         run_command = [str(self.multipass_path), "exec", instance_name, "--", *command]
 
-        quoted = " ".join([shlex.quote(c) for c in command])
-        logger.warning("Executing in VM: %s", quoted)
+        quoted_run_command = " ".join([shlex.quote(c) for c in command])
+        logger.warning("Executing on host: %s", quoted_run_command)
 
         return runner(run_command, **kwargs)  # pylint: disable=subprocess-run-check
 

@@ -51,7 +51,7 @@ class MultipassInstance(Executor):
         self,
         *,
         name: str,
-        multipass: Multipass,
+        multipass: Optional[Multipass] = None,
         host_gid: int = os.getuid(),
         host_uid: int = os.getgid(),
         platform: str = sys.platform,
@@ -61,7 +61,12 @@ class MultipassInstance(Executor):
         self.name = name
         self._host_gid = host_gid
         self._host_uid = host_uid
-        self._multipass = multipass
+
+        if multipass is not None:
+            self._multipass = multipass
+        else:
+            self._multipass = Multipass()
+
         self._platform = platform
 
     def create_file(
