@@ -153,8 +153,12 @@ class LXDProvider:
             if self._has_compatible_snapshot(
                 snapshot_name=snapshot_name, project=project, remote=remote
             ):
-                logger.info("Using compatible snapshot {snapshot_name!r}.")
+                logger.info(f"Using compatible snapshot {snapshot_name!r}.")
                 image_name = snapshot_name
+                image_remote = "local"
+
+                # Using a snapshot image, don't re-publish.
+                use_snapshots = False
 
             instance.launch(
                 image=image_name,

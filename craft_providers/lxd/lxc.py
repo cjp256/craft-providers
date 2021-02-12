@@ -150,6 +150,7 @@ class LXC:  # pylint: disable=too-many-public-methods
         mode: str = "auto",
         project: str = "default",
         remote: str = "local",
+        env: Optional[Dict[str, str]] = None,
     ) -> List[str]:
         """Formulate command to run."""
         final_cmd = [
@@ -166,8 +167,13 @@ class LXC:  # pylint: disable=too-many-public-methods
         if mode != "auto":
             final_cmd.extend(["--mode", mode])
 
-        final_cmd.extend(["--", *command])
+        final_cmd.append("--")
 
+        if env is not None:
+            env_args = [f"{k}={v}" for k, v in env.items()]
+            final_cmd.extend(["env", *env_args])
+
+        final_cmd.extend(command)
         return final_cmd
 
     def exec(
@@ -190,6 +196,7 @@ class LXC:  # pylint: disable=too-many-public-methods
             mode=mode,
             project=project,
             remote=remote,
+            env=kwargs.get("env"),
         )
 
         quoted = " ".join([shlex.quote(c) for c in command])
