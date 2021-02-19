@@ -121,9 +121,6 @@ class MultipassInstance(Executor):
             purge=purge,
         )
 
-    def _formulate_command(self, command: List[str]) -> List[str]:
-        return ["sudo", "-H", "--", *command]
-
     def execute_popen(self, command: List[str], **kwargs) -> subprocess.Popen:
         """Execute process in instance using subprocess.Popen().
 
@@ -134,7 +131,9 @@ class MultipassInstance(Executor):
         """
         return self._multipass.exec(
             instance_name=self.name,
-            command=self._formulate_command(command),
+            command=self._formulate_command(
+                command=command, env=kwargs.pop("env", None)
+            ),
             runner=subprocess.Popen,
             **kwargs,
         )
@@ -155,11 +154,30 @@ class MultipassInstance(Executor):
         """
         return self._multipass.exec(
             instance_name=self.name,
-            command=self._formulate_command(command),
+            command=self._formulate_command(
+                command=command, env=kwargs.pop("env", None)
+            ),
             runner=subprocess.run,
             check=check,
             **kwargs,
         )
+
+    def _formulate_command(
+        self,
+        *,
+        command: List[str],
+        env: Optional[Dict[str, str]] = None,
+    ) -> List[str]:
+        """Formulate command to run."""
+        final_cmd = ["sudo", "-H", "--"]
+
+        if env is not None:
+            env_args = [f"{k}={v}" for k, v in env.items()]
+            final_cmd += ["env", *env_args]
+
+        final_cmd += command
+
+        return final_cmd
 
     def exists(self) -> bool:
         """Check if instance exists.

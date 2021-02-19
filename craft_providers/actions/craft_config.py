@@ -61,12 +61,13 @@ def save(
 
 def is_compatible(
     *, executor: Executor, craft_config_path: pathlib.Path, compatibility_tag: str
-) -> None:
-    config = load(executor=executor, config_path=config_path)
+) -> bool:
+    """Check if craft config is compatible."""
+    config = load(executor=executor, config_path=craft_config_path)
 
     # If no config has been written, assume it is compatible (likely an unfinished setup).
     if config is None:
-        return
+        return True
 
     tag = config.get("compatibility_tag")
     return tag == compatibility_tag

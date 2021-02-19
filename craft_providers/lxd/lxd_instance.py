@@ -109,7 +109,9 @@ class LXDInstance(Executor):
         """
         return self.lxc.exec(
             instance_name=self.name,
-            command=command,
+            command=self._formulate_command(
+                command=command, env=kwargs.pop("env", None)
+            ),
             project=self.project,
             remote=self.remote,
             runner=subprocess.Popen,
@@ -132,7 +134,9 @@ class LXDInstance(Executor):
         """
         return self.lxc.exec(
             instance_name=self.name,
-            command=command,
+            command=self._formulate_command(
+                command=command, env=kwargs.pop("env", None)
+            ),
             project=self.project,
             remote=self.remote,
             runner=subprocess.run,
@@ -146,6 +150,23 @@ class LXDInstance(Executor):
         :returns: True if instance exists.
         """
         return self.get_state() is not None
+
+    def _formulate_command(
+        self,
+        *,
+        command: List[str],
+        env: Optional[Dict[str, str]] = None,
+    ) -> List[str]:
+        """Formulate command to run."""
+        final_cmd = []
+
+        if env is not None:
+            env_args = [f"{k}={v}" for k, v in env.items()]
+            final_cmd += ["env", *env_args]
+
+        final_cmd += command
+
+        return final_cmd
 
     def get_state(self) -> Optional[Dict[str, Any]]:
         """Get state configuration for instance.
@@ -180,7 +201,7 @@ class LXDInstance(Executor):
 
         return any(
             disk.get("path") == target.as_posix()
-            and disk.get("host_source") == host_source.as_posix()
+            and disk.get("source") == host_source.as_posix()
             for disk in disks
         )
 

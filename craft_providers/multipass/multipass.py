@@ -55,7 +55,9 @@ class Multipass:
     :param multipass_path: Path to multipass command to use.
     """
 
-    def __init__(self, *, multipass_path: pathlib.Path = pathlib.Path("multipass")) -> None:
+    def __init__(
+        self, *, multipass_path: pathlib.Path = pathlib.Path("multipass")
+    ) -> None:
         self.multipass_path = multipass_path
 
     def _run(  # pylint: disable=redefined-builtin
@@ -124,12 +126,12 @@ class Multipass:
 
         :returns: Runner's instance.
         """
-        run_command = [str(self.multipass_path), "exec", instance_name, "--", *command]
+        final_cmd = [str(self.multipass_path), "exec", instance_name, "--", *command]
 
-        quoted_run_command = " ".join([shlex.quote(c) for c in command])
-        logger.warning("Executing on host: %s", quoted_run_command)
+        quoted_final_cmd = " ".join([shlex.quote(c) for c in final_cmd])
+        logger.warning("Executing on host: %s", quoted_final_cmd)
 
-        return runner(run_command, **kwargs)  # pylint: disable=subprocess-run-check
+        return runner(final_cmd, **kwargs)  # pylint: disable=subprocess-run-check
 
     def info(self, *, instance_name: str) -> Optional[Dict[str, Any]]:
         """Get information/state for instance.

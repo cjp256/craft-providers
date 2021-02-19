@@ -153,7 +153,7 @@ class LXDProvider:
             if use_snapshots and self._has_compatible_snapshot(
                 snapshot_name=snapshot_name, project=project, remote=remote
             ):
-                logger.info(f"Using compatible snapshot {snapshot_name!r}.")
+                logger.info("Using compatible snapshot %r.", snapshot_name)
                 image_name = snapshot_name
                 image_remote = "local"
 
