@@ -53,12 +53,26 @@ class BuilddImage(Image):
         alias: BuilddImageAlias,
         compatibility_tag: str = "craft-buildd-image-v0",
         hostname: str = "craft-buildd-instance",
+        http_proxy: Optional[str] = None,
+        https_proxy: Optional[str] = None,
     ):
         super().__init__(compatibility_tag=compatibility_tag, name=alias.value)
 
         self.alias: Final[BuilddImageAlias] = alias
         self.hostname: Final[str] = hostname
+        self.http_proxy = http_proxy
+        self.https_proxy = https_proxy
         self._craft_config_path = pathlib.Path("/etc/craft-image.conf")
+
+        self.command_env = dict(
+            PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
+        )
+
+        if self.http_proxy:
+            self.command_env["http_proxy"] = self.http_proxy
+
+        if self.https_proxy:
+            self.command_env["https_proxy"] = self.https_proxy
 
     def _read_os_release(self, *, executor: Executor) -> Optional[Dict[str, Any]]:
         try:
@@ -129,6 +143,7 @@ class BuilddImage(Image):
         :param executor: Executor for target container.
         """
         self.ensure_compatible(executor=executor)
+        self._setup_environment(executor=executor)
         self._setup_wait_for_system_ready(executor=executor)
         self._setup_craft_image_config(executor=executor)
         self._setup_hostname(executor=executor)
@@ -143,9 +158,17 @@ class BuilddImage(Image):
 
         :param executor: Executor for target container.
         """
-        executor.execute_run(command=["apt-get", "update"], check=True)
         executor.execute_run(
-            command=["apt-get", "install", "-y", "apt-utils"], check=True
+            command=["apt-get", "update"],
+            check=True,
+            capture_output=True,
+            env=self.command_env,
+        )
+        executor.execute_run(
+            command=["apt-get", "install", "-y", "apt-utils"],
+            check=True,
+            capture_output=True,
+            env=self.command_env,
         )
 
     def _setup_craft_image_config(self, *, executor: Executor) -> None:
@@ -157,6 +180,19 @@ class BuilddImage(Image):
             config_path=self._craft_config_path,
         )
 
+    def _setup_environment(self, *, executor: Executor) -> None:
+        """Configure hostname, installing /etc/hostname.
+
+        :param executor: Executor for target container.
+        """
+        content = "\n".join([f"{k}={v}" for k, v in self.command_env.items()]).encode()
+
+        executor.create_file(
+            destination=pathlib.Path("/etc/environment"),
+            content=content,
+            file_mode="0644",
+        )
+
     def _setup_hostname(self, *, executor: Executor) -> None:
         """Configure hostname, installing /etc/hostname.
 
@@ -166,6 +202,12 @@ class BuilddImage(Image):
             destination=pathlib.Path("/etc/hostname"),
             content=self.hostname.encode(),
             file_mode="0644",
+        )
+        executor.execute_run(
+            command=["hostname", "-F", "/etc/hostname"],
+            check=True,
+            capture_output=True,
+            env=self.command_env,
         )
 
     def _setup_networkd(self, *, executor: Executor) -> None:
@@ -195,11 +237,17 @@ class BuilddImage(Image):
         )
 
         executor.execute_run(
-            command=["systemctl", "enable", "systemd-networkd"], check=True
+            command=["systemctl", "enable", "systemd-networkd"],
+            check=True,
+            capture_output=True,
+            env=self.command_env,
         )
 
         executor.execute_run(
-            command=["systemctl", "restart", "systemd-networkd"], check=True
+            command=["systemctl", "restart", "systemd-networkd"],
+            check=True,
+            capture_output=True,
+            env=self.command_env,
         )
 
     def _setup_resolved(self, *, executor: Executor) -> None:
@@ -219,11 +267,17 @@ class BuilddImage(Image):
         )
 
         executor.execute_run(
-            command=["systemctl", "enable", "systemd-resolved"], check=True
+            command=["systemctl", "enable", "systemd-resolved"],
+            check=True,
+            capture_output=True,
+            env=self.command_env,
         )
 
         executor.execute_run(
-            command=["systemctl", "restart", "systemd-resolved"], check=True
+            command=["systemctl", "restart", "systemd-resolved"],
+            check=True,
+            capture_output=True,
+            env=self.command_env,
         )
 
     def _setup_snapd(self, *, executor: Executor) -> None:
@@ -241,23 +295,45 @@ class BuilddImage(Image):
                 "--yes",
             ],
             check=True,
+            capture_output=True,
+            env=self.command_env,
         )
 
         executor.execute_run(
-            command=["systemctl", "enable", "systemd-udevd"], check=True
+            command=["systemctl", "enable", "systemd-udevd"],
+            check=True,
+            capture_output=True,
+            env=self.command_env,
         )
         executor.execute_run(
-            command=["systemctl", "start", "systemd-udevd"], check=True
+            command=["systemctl", "start", "systemd-udevd"],
+            check=True,
+            capture_output=True,
+            env=self.command_env,
         )
         executor.execute_run(
-            command=["apt-get", "install", "snapd", "--yes"], check=True
+            command=["apt-get", "install", "snapd", "--yes"],
+            check=True,
+            capture_output=True,
+            env=self.command_env,
         )
-        executor.execute_run(command=["systemctl", "start", "snapd.socket"], check=True)
         executor.execute_run(
-            command=["systemctl", "start", "snapd.service"], check=True
+            command=["systemctl", "start", "snapd.socket"],
+            check=True,
+            capture_output=True,
+            env=self.command_env,
         )
         executor.execute_run(
-            command=["snap", "wait", "system", "seed.loaded"], check=True
+            command=["systemctl", "start", "snapd.service"],
+            check=True,
+            capture_output=True,
+            env=self.command_env,
+        )
+        executor.execute_run(
+            command=["snap", "wait", "system", "seed.loaded"],
+            check=True,
+            capture_output=True,
+            env=self.command_env,
         )
 
     def _setup_wait_for_network(
@@ -271,7 +347,10 @@ class BuilddImage(Image):
         logger.info("Waiting for networking to be ready...")
         for _ in range(timeout_secs * 2):
             proc = executor.execute_run(
-                command=["getent", "hosts", "snapcraft.io"], stdout=subprocess.DEVNULL
+                command=["getent", "hosts", "snapcraft.io"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                env=self.command_env,
             )
             if proc.returncode == 0:
                 break
@@ -292,9 +371,9 @@ class BuilddImage(Image):
         for _ in range(retry_count):
             proc = executor.execute_run(
                 command=["systemctl", "is-system-running"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
+                capture_output=True,
                 check=False,
+                env=self.command_env,
             )
 
             running_state = proc.stdout.decode().strip()
