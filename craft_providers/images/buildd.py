@@ -77,7 +77,7 @@ class BuilddImage(Image):
     def _read_os_release(self, *, executor: Executor) -> Optional[Dict[str, Any]]:
         try:
             proc = executor.execute_run(
-                command=["cat", "/etc/os-release"],
+                ["cat", "/etc/os-release"],
                 check=False,
                 stdout=subprocess.PIPE,
             )
@@ -158,16 +158,22 @@ class BuilddImage(Image):
 
         :param executor: Executor for target container.
         """
+        executor.create_file(
+            destination=pathlib.Path("/etc/apt/apt.conf.d/00no-recommends"),
+            content='Apt::Install-Recommends "false";\n'.encode(),
+            file_mode="0644",
+        )
+
         executor.execute_run(
-            command=["apt-get", "update"],
-            check=True,
+            ["apt-get", "update"],
             capture_output=True,
+            check=True,
             env=self.command_env,
         )
         executor.execute_run(
-            command=["apt-get", "install", "-y", "apt-utils"],
-            check=True,
+            ["apt-get", "install", "-y", "apt-utils"],
             capture_output=True,
+            check=True,
             env=self.command_env,
         )
 
@@ -204,9 +210,9 @@ class BuilddImage(Image):
             file_mode="0644",
         )
         executor.execute_run(
-            command=["hostname", "-F", "/etc/hostname"],
-            check=True,
+            ["hostname", "-F", "/etc/hostname"],
             capture_output=True,
+            check=True,
             env=self.command_env,
         )
 
@@ -237,14 +243,14 @@ class BuilddImage(Image):
         )
 
         executor.execute_run(
-            command=["systemctl", "enable", "systemd-networkd"],
-            check=True,
+            ["systemctl", "enable", "systemd-networkd"],
             capture_output=True,
+            check=True,
             env=self.command_env,
         )
 
         executor.execute_run(
-            command=["systemctl", "restart", "systemd-networkd"],
+            ["systemctl", "restart", "systemd-networkd"],
             check=True,
             capture_output=True,
             env=self.command_env,
@@ -257,7 +263,7 @@ class BuilddImage(Image):
         :param timeout_secs: Timeout in seconds.
         """
         executor.execute_run(
-            command=[
+            [
                 "ln",
                 "-sf",
                 "/run/systemd/resolve/resolv.conf",
@@ -267,14 +273,14 @@ class BuilddImage(Image):
         )
 
         executor.execute_run(
-            command=["systemctl", "enable", "systemd-resolved"],
+            ["systemctl", "enable", "systemd-resolved"],
             check=True,
             capture_output=True,
             env=self.command_env,
         )
 
         executor.execute_run(
-            command=["systemctl", "restart", "systemd-resolved"],
+            ["systemctl", "restart", "systemd-resolved"],
             check=True,
             capture_output=True,
             env=self.command_env,
@@ -287,7 +293,7 @@ class BuilddImage(Image):
         :param timeout_secs: Timeout in seconds.
         """
         executor.execute_run(
-            command=[
+            [
                 "apt-get",
                 "install",
                 "fuse",
@@ -300,39 +306,42 @@ class BuilddImage(Image):
         )
 
         executor.execute_run(
-            command=["systemctl", "enable", "systemd-udevd"],
-            check=True,
+            ["systemctl", "enable", "systemd-udevd"],
             capture_output=True,
+            check=True,
             env=self.command_env,
         )
         executor.execute_run(
-            command=["systemctl", "start", "systemd-udevd"],
-            check=True,
+            ["systemctl", "start", "systemd-udevd"],
             capture_output=True,
+            check=True,
             env=self.command_env,
         )
         executor.execute_run(
-            command=["apt-get", "install", "snapd", "--yes"],
-            check=True,
+            ["apt-get", "install", "snapd", "--yes"],
             capture_output=True,
+            check=True,
             env=self.command_env,
         )
         executor.execute_run(
-            command=["systemctl", "start", "snapd.socket"],
-            check=True,
+            ["systemctl", "start", "snapd.socket"],
             capture_output=True,
+            check=True,
+            env=self.command_env,
+        )
+
+        # Restart, not start, the service in case the environment
+        # has changed and the service is already running.
+        executor.execute_run(
+            ["systemctl", "restart", "snapd.service"],
+            capture_output=True,
+            check=True,
             env=self.command_env,
         )
         executor.execute_run(
-            command=["systemctl", "start", "snapd.service"],
-            check=True,
+            ["snap", "wait", "system", "seed.loaded"],
             capture_output=True,
-            env=self.command_env,
-        )
-        executor.execute_run(
-            command=["snap", "wait", "system", "seed.loaded"],
             check=True,
-            capture_output=True,
             env=self.command_env,
         )
 
@@ -347,7 +356,8 @@ class BuilddImage(Image):
         logger.info("Waiting for networking to be ready...")
         for _ in range(timeout_secs * 2):
             proc = executor.execute_run(
-                command=["getent", "hosts", "snapcraft.io"],
+                ["getent", "hosts", "snapcraft.io"],
+                check=False,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 env=self.command_env,
@@ -370,7 +380,7 @@ class BuilddImage(Image):
         logger.info("Waiting for container to be ready...")
         for _ in range(retry_count):
             proc = executor.execute_run(
-                command=["systemctl", "is-system-running"],
+                ["systemctl", "is-system-running"],
                 capture_output=True,
                 check=False,
                 env=self.command_env,

@@ -100,15 +100,18 @@ class MultipassInstance(Executor):
         )
 
         self.execute_run(
-            command=["sudo", "chown", f"{user}:{group}", tmp_file_path],
+            ["sudo", "chown", f"{user}:{group}", tmp_file_path],
+            check=True,
         )
 
         self.execute_run(
-            command=["sudo", "chmod", file_mode, tmp_file_path],
+            ["sudo", "chmod", file_mode, tmp_file_path],
+            check=True,
         )
 
         self.execute_run(
-            command=["sudo", "mv", tmp_file_path, destination.as_posix()],
+            ["sudo", "mv", tmp_file_path, destination.as_posix()],
+            check=True,
         )
 
     def delete(self, purge: bool = True) -> None:
@@ -138,9 +141,7 @@ class MultipassInstance(Executor):
             **kwargs,
         )
 
-    def execute_run(
-        self, command: List[str], check=True, **kwargs
-    ) -> subprocess.CompletedProcess:
+    def execute_run(self, command: List[str], **kwargs) -> subprocess.CompletedProcess:
         """Execute command using subprocess.run().
 
         :param command: Command to execute.
@@ -158,7 +159,6 @@ class MultipassInstance(Executor):
                 command=command, env=kwargs.pop("env", None)
             ),
             runner=subprocess.run,
-            check=check,
             **kwargs,
         )
 

@@ -34,13 +34,13 @@ def load(*, executor: Executor, config_path: pathlib.Path) -> Optional[Dict[str,
     try:
         proc = executor.execute_run(
             command=["cat", str(config_path)],
+            capture_output=True,
             check=True,
-            stdout=subprocess.PIPE,
         )
     except subprocess.CalledProcessError:
         return None
 
-    return yaml.load(proc.stdout, Loader=yaml.SafeLoader)
+    return yaml.safe_load(proc.stdout)
 
 
 def save(

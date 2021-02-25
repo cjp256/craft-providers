@@ -55,14 +55,11 @@ class Executor(ABC):
         """
 
     @abstractmethod
-    def execute_run(
-        self, command: List[str], check=True, **kwargs
-    ) -> subprocess.CompletedProcess:
+    def execute_run(self, command: List[str], **kwargs) -> subprocess.CompletedProcess:
         """Execute command using subprocess.run().
 
         :param command: Command to execute.
         :param kwargs: Keyword args to pass to subprocess.run().
-        :param check: Raise exception on failure.
 
         :returns: Completed process.
 

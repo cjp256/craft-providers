@@ -82,7 +82,8 @@ class LXDInstance(Executor):
         # We don't use gid/uid for file_push() in case we don't know the
         # user/group IDs in advance.  Just chown it.
         self.execute_run(
-            command=["chown", f"{user}:{group}", destination.as_posix()],
+            ["chown", f"{user}:{group}", destination.as_posix()],
+            check=True,
         )
 
         os.unlink(temp_file.name)
@@ -118,9 +119,7 @@ class LXDInstance(Executor):
             **kwargs,
         )
 
-    def execute_run(
-        self, command: List[str], check=True, **kwargs
-    ) -> subprocess.CompletedProcess:
+    def execute_run(self, command: List[str], **kwargs) -> subprocess.CompletedProcess:
         """Execute command using subprocess.run().
 
         :param command: Command to execute.
@@ -140,7 +139,6 @@ class LXDInstance(Executor):
             project=self.project,
             remote=self.remote,
             runner=subprocess.run,
-            check=check,
             **kwargs,
         )
 
@@ -306,20 +304,6 @@ class LXDInstance(Executor):
                 remote=self.remote,
                 create_dirs=True,
             )
-        elif actions.linux.is_target_directory(executor=self, target=source):
-            self.lxc.file_pull(
-                instance_name=self.name,
-                source=source,
-                destination=destination,
-                project=self.project,
-                remote=self.remote,
-                create_dirs=True,
-                recursive=True,
-            )
-            # TODO: use mount() if available
-            actions.linux.directory_sync_from_remote(
-                executor=self, source=source, destination=destination
-            )
         else:
             raise FileNotFoundError(f"Source {source} not found.")
 
@@ -345,11 +329,8 @@ class LXDInstance(Executor):
                 destination=destination,
                 project=self.project,
                 remote=self.remote,
-            )
-        elif source.is_dir():
-            # TODO: use mount() if available
-            actions.linux.directory_sync_to_remote(
-                executor=self, source=source, destination=destination, delete=True
+                gid=0,
+                uid=0,
             )
         else:
             raise FileNotFoundError(f"Source {source} not found.")
