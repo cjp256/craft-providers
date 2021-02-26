@@ -20,25 +20,11 @@ import sys
 from craft_providers import images
 
 from . import multipass_installer
+from .errors import MultipassError
 from .multipass import Multipass
 from .multipass_instance import MultipassInstance
 
 logger = logging.getLogger(__name__)
-
-
-class MultipassProviderError(Exception):
-    """Multipass provider error.
-
-    :param msg: Reason for provider error.
-    """
-
-    def __init__(self, msg: str) -> None:
-        super().__init__()
-
-        self.msg = msg
-
-    def __str__(self) -> str:
-        return self.msg
 
 
 class MultipassProvider:
@@ -67,6 +53,9 @@ class MultipassProvider:
         :param instance: Instance to configure.
         :param auto_clean: Automatically clean incompatible instances.
         :param image_configuration: Image configuration.
+
+        :raises image.CompatibilityError: If image is incompatible and
+          auto_clean is disabled.
         """
         instance.start()
 
@@ -114,7 +103,10 @@ class MultipassProvider:
         # Update API object to utilize discovered path.
         multipass_path = multipass_installer.find_multipass()
         if multipass_path is None:
-            raise MultipassProviderError("Multipass not found.")
+            raise MultipassError(
+                brief="Multipass not installed.",
+                resolution="Please verify that 'multipass' is installed and that PATH is configured correctly.",
+            )
 
         multipass = Multipass(multipass_path=multipass_path)
 

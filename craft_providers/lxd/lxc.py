@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Optional
 
 import yaml
 
+from .errors import LXDError
 from .yaml_loader import _load_yaml
 
 logger = logging.getLogger(__name__)
@@ -42,34 +43,17 @@ class LXC:  # pylint: disable=too-many-public-methods
 
     def _run(  # pylint: disable=redefined-builtin
         self,
-        *,
         command: List[str],
-        project: str = "default",
+        *,
         check: bool = True,
-        input=None,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
+        project: str = "default",
+        **kwargs,
     ) -> subprocess.CompletedProcess:
         """Execute command in instance_name, allowing output to console."""
         command = [str(self.lxc_path), "--project", project, *command]
-        quoted = " ".join([shlex.quote(c) for c in command])
 
-        logger.warning("Executing on host: %s", quoted)
-
-        try:
-            if input is not None:
-                proc = subprocess.run(
-                    command, check=check, input=input, stderr=stderr, stdout=stdout
-                )
-            else:
-                proc = subprocess.run(
-                    command, check=check, stderr=stderr, stdout=stdout
-                )
-        except subprocess.CalledProcessError as error:
-            logger.warning("Failed to execute: %s", error.output)
-            raise error
-
-        return proc
+        logger.warning("Executing on host: %s", shlex.join(command))
+        return subprocess.run(command, check=check, **kwargs)
 
     def config_device_add_disk(
         self,
@@ -85,28 +69,48 @@ class LXC:  # pylint: disable=too-many-public-methods
         if device_name is None:
             device_name = destination.as_posix().replace("/", "_")
 
-        self._run(
-            command=[
-                "config",
-                "device",
-                "add",
-                f"{remote}:{instance_name}",
-                device_name,
-                "disk",
-                f"source={source.as_posix()}",
-                f"path={destination.as_posix()}",
-            ],
-            project=project,
-        )
+        command = [
+            "config",
+            "device",
+            "add",
+            f"{remote}:{instance_name}",
+            device_name,
+            "disk",
+            f"source={source.as_posix()}",
+            f"path={destination.as_posix()}",
+        ]
+
+        try:
+            self._run(
+                command,
+                capture_output=True,
+                check=True,
+                project=project,
+            )
+        except subprocess.CalledProcessError as error:
+            raise LXDError.from_called_process_error(
+                brief=f"Failed to add disk to instance {instance_name!r} at {str(destination)!r}.",
+                error=error,
+            )
 
     def config_device_show(
         self, *, instance_name: str, project: str = "default", remote: str = "local"
     ) -> Dict[str, Any]:
         """Show device config."""
-        proc = self._run(
-            command=["config", "device", "show", f"{remote}:{instance_name}"],
-            project=project,
-        )
+        command = ["config", "device", "show", f"{remote}:{instance_name}"]
+
+        try:
+            proc = self._run(
+                command,
+                capture_output=True,
+                check=True,
+                project=project,
+            )
+        except subprocess.CalledProcessError as error:
+            raise LXDError.from_called_process_error(
+                brief=f"Failed to list devices for {instance_name!r}.",
+                error=error,
+            )
 
         return _load_yaml(proc.stdout)
 
@@ -120,10 +124,20 @@ class LXC:  # pylint: disable=too-many-public-methods
         remote: str = "local",
     ) -> None:
         """Set instance_name configuration key."""
-        self._run(
-            command=["config", "set", f"{remote}:{instance_name}", key, value],
-            project=project,
-        )
+        command = ["config", "set", f"{remote}:{instance_name}", key, value]
+
+        try:
+            self._run(
+                command,
+                capture_output=True,
+                check=True,
+                project=project,
+            )
+        except subprocess.CalledProcessError as error:
+            raise LXDError.from_called_process_error(
+                brief=f"Failed to set config key {key!r} => {value!r} for instance {instance_name!r}.",
+                error=error,
+            )
 
     def delete(
         self,
@@ -139,7 +153,18 @@ class LXC:  # pylint: disable=too-many-public-methods
         if force:
             command.append("--force")
 
-        self._run(command=command, project=project)
+        try:
+            self._run(
+                command,
+                capture_output=True,
+                check=True,
+                project=project,
+            )
+        except subprocess.CalledProcessError as error:
+            raise LXDError.from_called_process_error(
+                brief=f"Failed to delete instance {instance_name!r}.",
+                error=error,
+            )
 
     def _formulate_command(
         self,
@@ -199,8 +224,7 @@ class LXC:  # pylint: disable=too-many-public-methods
             env=kwargs.get("env"),
         )
 
-        quoted = " ".join([shlex.quote(c) for c in command])
-        logger.warning("Executing in container: %s", quoted)
+        logger.warning("Executing in container: %s", shlex.join(command))
 
         return runner(command, **kwargs)  # pylint: disable=subprocess-run-check
 
@@ -229,10 +253,18 @@ class LXC:  # pylint: disable=too-many-public-methods
         if recursive:
             command.append("--recursive")
 
-        self._run(
-            command=command,
-            project=project,
-        )
+        try:
+            self._run(
+                command,
+                capture_output=True,
+                check=True,
+                project=project,
+            )
+        except subprocess.CalledProcessError as error:
+            raise LXDError.from_called_process_error(
+                brief=f"Failed to pull file {str(source)!r} to instance {instance_name!r} for project {project!r} on remote {remote!r}.",
+                error=error,
+            )
 
     def file_push(
         self,
@@ -271,19 +303,38 @@ class LXC:  # pylint: disable=too-many-public-methods
         if uid != -1:
             command.append(f"--uid={gid}")
 
-        self._run(
-            command=command,
-            project=project,
-        )
+        try:
+            self._run(
+                command,
+                capture_output=True,
+                check=True,
+                project=project,
+            )
+        except subprocess.CalledProcessError as error:
+            raise LXDError.from_called_process_error(
+                brief=f"Failed to push file {str(source)!r} to instance {instance_name!r}.",
+                error=error,
+            )
 
     def info(
         self, *, project: str = "default", remote: str = "local"
     ) -> Dict[str, Any]:
         """Get server config that instance_name is running on."""
-        proc = self._run(
-            command=["info", remote + ":"],
-            project=project,
-        )
+        command = ["info", remote + ":"]
+
+        try:
+            proc = self._run(
+                command,
+                capture_output=True,
+                check=True,
+                project=project,
+            )
+        except subprocess.CalledProcessError as error:
+            raise LXDError.from_called_process_error(
+                brief=f"Failed to get info for remote {remote!r}.",
+                error=error,
+            )
+
         return _load_yaml(proc.stdout)
 
     def launch(
@@ -310,7 +361,18 @@ class LXC:  # pylint: disable=too-many-public-methods
         for config_key in [f"{k}={v}" for k, v in config_keys.items()]:
             command.extend(["--config", config_key])
 
-        self._run(command=command, project=project)
+        try:
+            self._run(
+                command,
+                capture_output=True,
+                check=True,
+                project=project,
+            )
+        except subprocess.CalledProcessError as error:
+            raise LXDError.from_called_process_error(
+                brief=f"Failed to launch instance {instance_name!r} for project {project!r} on remote {remote!r}.",
+                error=error,
+            )
 
     def image_copy(
         self,
@@ -322,38 +384,68 @@ class LXC:  # pylint: disable=too-many-public-methods
         remote: str = "local",
     ) -> None:
         """Copy image."""
-        self._run(
-            command=[
-                "image",
-                "copy",
-                f"{image_remote}:{image}",
-                f"{remote}:",
-                f"--alias={alias}",
-            ],
-            project=project,
-        )
+        command = [
+            "image",
+            "copy",
+            f"{image_remote}:{image}",
+            f"{remote}:",
+            f"--alias={alias}",
+        ]
+
+        try:
+            self._run(
+                command,
+                capture_output=True,
+                check=True,
+                project=project,
+            )
+        except subprocess.CalledProcessError as error:
+            raise LXDError.from_called_process_error(
+                brief=f"Failed to delete image {image!r} for project {project!r} on remote {remote!r}.",
+                error=error,
+            )
 
     def image_delete(
         self, *, image: str, project: str = "default", remote: str = "local"
     ) -> None:
         """Delete image."""
-        self._run(
-            command=[
-                "image",
-                "delete",
-                f"{remote}:{image}",
-            ],
-            project=project,
-        )
+        command = [
+            "image",
+            "delete",
+            f"{remote}:{image}",
+        ]
+
+        try:
+            self._run(
+                command,
+                capture_output=True,
+                check=True,
+                project=project,
+            )
+        except subprocess.CalledProcessError as error:
+            raise LXDError.from_called_process_error(
+                brief=f"Failed to delete image {image!r} for project {project!r} on remote {remote!r}.",
+                error=error,
+            )
 
     def image_list(
         self, *, project: str = "default", remote: str = "local"
     ) -> List[Dict[str, Any]]:
         """List instance_names."""
-        proc = self._run(
-            command=["image", "list", f"{remote}:", "--format=yaml"],
-            project=project,
-        )
+        command = ["image", "list", f"{remote}:", "--format=yaml"]
+
+        try:
+            proc = self._run(
+                command,
+                capture_output=True,
+                check=True,
+                project=project,
+            )
+        except subprocess.CalledProcessError as error:
+            raise LXDError.from_called_process_error(
+                brief=f"Failed to list images for project {project!r} on remote {remote!r}.",
+                error=error,
+            )
 
         return _load_yaml(proc.stdout)
 
@@ -364,17 +456,25 @@ class LXC:  # pylint: disable=too-many-public-methods
         project: str = "default",
         remote: str = "local",
     ) -> List[Dict[str, Any]]:
-        """List instance_names."""
+        """List instances."""
         command = ["list", "--format=yaml"]
         if instance_name is None:
             instance_name = ""
 
         command.append(f"{remote}:{instance_name}")
 
-        proc = self._run(
-            command=command,
-            project=project,
-        )
+        try:
+            proc = self._run(
+                command,
+                capture_output=True,
+                check=True,
+                project=project,
+            )
+        except subprocess.CalledProcessError as error:
+            raise LXDError.from_called_process_error(
+                brief=f"Failed to list instances for project {project!r}.",
+                error=error,
+            )
 
         return _load_yaml(proc.stdout)
 
@@ -387,40 +487,99 @@ class LXC:  # pylint: disable=too-many-public-methods
         remote: str = "local",
     ) -> None:
         """Edit profile."""
+        command = ["profile", "edit", f"{remote}:{profile}"]
         encoded_config = yaml.dump(config).encode()
-        self._run(
-            command=["profile", "edit", f"{remote}:{profile}"],
-            project=project,
-            input=encoded_config,
-        )
+
+        try:
+            self._run(
+                command,
+                capture_output=True,
+                check=True,
+                project=project,
+                input=encoded_config,
+            )
+        except subprocess.CalledProcessError as error:
+            raise LXDError.from_called_process_error(
+                brief=f"Failed to set profile {profile!r} on remote {remote!r}.",
+                error=error,
+            )
 
     def profile_show(
         self, *, profile: str, project: str = "default", remote: str = "local"
     ) -> Dict[str, Any]:
         """Get profile."""
-        proc = self._run(
-            command=["profile", "show", f"{remote}:{profile}"], project=project
-        )
+        command = ["profile", "show", f"{remote}:{profile}"]
+
+        try:
+            proc = self._run(
+                command,
+                capture_output=True,
+                check=True,
+                project=project,
+            )
+        except subprocess.CalledProcessError as error:
+            raise LXDError.from_called_process_error(
+                brief=f"Failed to get profile {profile!r} on remote {remote!r}.",
+                error=error,
+            )
 
         return _load_yaml(proc.stdout)
 
     def project_create(self, *, project: str, remote: str = "local") -> None:
         """Create project."""
-        self._run(command=["project", "create", f"{remote}:{project}"])
+        command = ["project", "create", f"{remote}:{project}"]
+
+        try:
+            self._run(
+                command,
+                capture_output=True,
+                check=True,
+                project=project,
+            )
+        except subprocess.CalledProcessError as error:
+            raise LXDError.from_called_process_error(
+                brief=f"Failed to create project {project!r} on remote {remote!r}.",
+                error=error,
+            )
 
     def project_list(self, remote: str = "local") -> List[str]:
         """Get list of projects.
 
         :returns: dictionary with remote name mapping to config.
         """
-        proc = self._run(command=["project", "list", remote, "--format=yaml"])
+        command = ["project", "list", remote, "--format=yaml"]
+
+        try:
+            proc = self._run(
+                command,
+                capture_output=True,
+                check=True,
+            )
+        except subprocess.CalledProcessError as error:
+            raise LXDError.from_called_process_error(
+                brief=f"Failed to list projects on remote {remote!r}.",
+                error=error,
+            )
 
         projects = _load_yaml(proc.stdout)
         return sorted([p["name"] for p in projects])
 
     def project_delete(self, *, project: str, remote: str = "local") -> None:
         """Delete project, if exists."""
-        self._run(command=["project", "delete", f"{remote}:{project}"])
+        command = ["project", "delete", f"{remote}:{project}"]
+
+        try:
+            self._run(
+                command,
+                capture_output=True,
+                check=True,
+                project=project,
+            )
+        except subprocess.CalledProcessError as error:
+            raise LXDError.from_called_process_error(
+                brief=f"Failed to delete project {project!r} on remote {remote!r}.",
+                error=error,
+            )
 
     def publish(
         self,
@@ -436,21 +595,53 @@ class LXC:  # pylint: disable=too-many-public-methods
         if force:
             command.append("--force")
 
-        self._run(
-            command=command,
-            project=project,
-        )
+        try:
+            self._run(
+                command,
+                capture_output=True,
+                check=True,
+                project=project,
+            )
+        except subprocess.CalledProcessError as error:
+            raise LXDError.from_called_process_error(
+                brief=f"Failed to publish instance {instance_name!r} to alias {alias!r}.",
+                error=error,
+            )
 
     def remote_add(self, *, remote: str, addr: str, protocol: str) -> None:
         """Add a public remote."""
-        self._run(command=["remote", "add", remote, addr, f"--protocol={protocol}"])
+        command = ["remote", "add", remote, addr, f"--protocol={protocol}"]
+
+        try:
+            self._run(
+                command,
+                capture_output=True,
+                check=True,
+            )
+        except subprocess.CalledProcessError as error:
+            raise LXDError.from_called_process_error(
+                brief=f"Failed to add remote {remote!r}.",
+                error=error,
+            )
 
     def remote_list(self) -> Dict[str, Any]:
         """Get list of remotes.
 
         :returns: dictionary with remote name mapping to config.
         """
-        proc = self._run(command=["remote", "list", "--format=yaml"])
+        command = ["remote", "list", "--format=yaml"]
+
+        try:
+            proc = self._run(
+                command,
+                capture_output=True,
+                check=True,
+            )
+        except subprocess.CalledProcessError as error:
+            raise LXDError.from_called_process_error(
+                brief="Failed to list remotes.",
+                error=error,
+            )
 
         return _load_yaml(proc.stdout)
 
@@ -471,7 +662,20 @@ class LXC:  # pylint: disable=too-many-public-methods
         self, *, instance_name: str, project: str = "default", remote: str = "local"
     ) -> None:
         """Start container."""
-        self._run(command=["start", f"{remote}:{instance_name}"], project=project)
+        command = ["start", f"{remote}:{instance_name}"]
+
+        try:
+            self._run(
+                command,
+                capture_output=True,
+                check=True,
+                project=project,
+            )
+        except subprocess.CalledProcessError as error:
+            raise LXDError.from_called_process_error(
+                brief=f"Failed to start {instance_name!r}.",
+                error=error,
+            )
 
     def stop(
         self,
@@ -491,7 +695,18 @@ class LXC:  # pylint: disable=too-many-public-methods
         if timeout != -1:
             command.append(f"--timeout={timeout}")
 
-        self._run(command=command, project=project)
+        try:
+            self._run(
+                command,
+                capture_output=True,
+                check=True,
+                project=project,
+            )
+        except subprocess.CalledProcessError as error:
+            raise LXDError.from_called_process_error(
+                brief=f"Failed to stop {instance_name!r}.",
+                error=error,
+            )
 
 
 def purge_project(*, lxc: LXC, project: str = "default", remote: str = "local") -> None:

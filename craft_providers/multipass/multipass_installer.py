@@ -23,22 +23,9 @@ from typing import Optional
 
 from craft_providers.util import path
 
+from .errors import MultipassInstallerError
+
 logger = logging.getLogger(__name__)
-
-
-class MultipassInstallerError(Exception):
-    """Multipass Installation Error.
-
-    :param reason: Reason for install failure.
-    """
-
-    def __init__(self, reason: str) -> None:
-        super().__init__()
-
-        self.reason = reason
-
-    def __str__(self) -> str:
-        return f"Failed to install Multipass: {self.reason}"
 
 
 def find_multipass() -> Optional[pathlib.Path]:
@@ -176,7 +163,7 @@ def install(*, platform=sys.platform) -> pathlib.Path:
 
     multipass_path = find_multipass()
     if multipass_path is None:
-        raise MultipassInstallerError("Installation failed - cannot find multipass.")
+        raise MultipassInstallerError("cannot find multipass")
 
     ensure_supported_version(multipass_path=multipass_path)
     return multipass_path

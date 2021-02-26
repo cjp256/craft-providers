@@ -14,16 +14,22 @@
 
 """Image errors."""
 
+from craft_providers.errors import ProviderError
 
-class CompatibilityError(Exception):
+
+class CompatibilityError(ProviderError):
     """Compatibility error.
 
     :param reason: Reason for incompatibility.
     """
 
     def __init__(self, reason: str) -> None:
-        super().__init__()
         self.reason = reason
+
+        brief = f"Incompatible image used: {reason}"
+        resolution = "Clean incompatible image/instance and try again."
+
+        super().__init__(brief=brief, resolution=resolution)
 
     def __repr__(self) -> str:
         """Return representation."""
