@@ -38,3 +38,7 @@ class CompatibilityError(ProviderError):
     def __str__(self) -> str:
         """Return string representation."""
         return self.reason
+
+
+class CraftEnvironmentError(ProviderError):
+    """Unexpected error setting up environment."""

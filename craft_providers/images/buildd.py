@@ -64,7 +64,7 @@ class BuilddImage(Image):
         self.https_proxy = https_proxy
         self._craft_config_path = pathlib.Path("/etc/craft-image.conf")
 
-        self.command_env = dict(
+        self.command_env: Dict[str, str] = dict(
             PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
         )
 
@@ -73,18 +73,6 @@ class BuilddImage(Image):
 
         if self.https_proxy:
             self.command_env["https_proxy"] = self.https_proxy
-
-    def _read_os_release(self, *, executor: Executor) -> Optional[Dict[str, Any]]:
-        try:
-            proc = executor.execute_run(
-                ["cat", "/etc/os-release"],
-                check=False,
-                stdout=subprocess.PIPE,
-            )
-        except subprocess.CalledProcessError:
-            return None
-
-        return parse_os_release(proc.stdout.decode())
 
     def ensure_compatible(self, *, executor: Executor) -> None:
         """Ensure exector target is compatible with image.
@@ -114,10 +102,7 @@ class BuilddImage(Image):
 
     def _ensure_os_compatible(self, *, executor: Executor) -> None:
         os_release = self._read_os_release(executor=executor)
-        if os_release is None:
-            raise errors.CompatibilityError(reason="/etc/os-release not found")
 
-        logger.warning(os_release)
         os_id = os_release.get("NAME")
         if os_id != "Ubuntu":
             raise errors.CompatibilityError(
@@ -130,6 +115,30 @@ class BuilddImage(Image):
             raise errors.CompatibilityError(
                 reason=f"Expected OS version {compat_version_id!r}, found {version_id!r}"
             )
+
+    def _read_os_release(self, *, executor: Executor) -> Dict[str, Any]:
+        """Read & parse /etc/os-release.
+
+        :param executor: Executor for target.
+
+        :returns: Dictionary of parsed /etc/os-release, if present. Otherwise None.
+        """
+        command = ["cat", "/etc/os-release"]
+
+        try:
+            proc = executor.execute_run(
+                command,
+                capture_output=True,
+                check=False,
+                env=self.command_env,
+            )
+        except subprocess.CalledProcessError as error:
+            raise errors.CraftEnvironmentError.from_called_process_error(
+                brief="Failed to read /etc/os-release.",
+                error=error,
+            )
+
+        return parse_os_release(proc.stdout.decode())
 
     def setup(self, *, executor: Executor) -> None:
         """Configure buildd image to minimum baseline.
@@ -164,18 +173,31 @@ class BuilddImage(Image):
             file_mode="0644",
         )
 
-        executor.execute_run(
-            ["apt-get", "update"],
-            capture_output=True,
-            check=True,
-            env=self.command_env,
-        )
-        executor.execute_run(
-            ["apt-get", "install", "-y", "apt-utils"],
-            capture_output=True,
-            check=True,
-            env=self.command_env,
-        )
+        try:
+            executor.execute_run(
+                ["apt-get", "update"],
+                capture_output=True,
+                check=True,
+                env=self.command_env,
+            )
+        except subprocess.CalledProcessError as error:
+            raise errors.CraftEnvironmentError.from_called_process_error(
+                brief="Failed to update apt cache.",
+                error=error,
+            )
+
+        try:
+            executor.execute_run(
+                ["apt-get", "install", "-y", "apt-utils"],
+                capture_output=True,
+                check=True,
+                env=self.command_env,
+            )
+        except subprocess.CalledProcessError as error:
+            raise errors.CraftEnvironmentError.from_called_process_error(
+                brief="Failed to install apt-utils.",
+                error=error,
+            )
 
     def _setup_craft_image_config(self, *, executor: Executor) -> None:
         config = dict(compatibility_tag=self.compatibility_tag)
@@ -209,12 +231,19 @@ class BuilddImage(Image):
             content=self.hostname.encode(),
             file_mode="0644",
         )
-        executor.execute_run(
-            ["hostname", "-F", "/etc/hostname"],
-            capture_output=True,
-            check=True,
-            env=self.command_env,
-        )
+
+        try:
+            executor.execute_run(
+                ["hostname", "-F", "/etc/hostname"],
+                capture_output=True,
+                check=True,
+                env=self.command_env,
+            )
+        except subprocess.CalledProcessError as error:
+            raise errors.CraftEnvironmentError.from_called_process_error(
+                brief="Failed to set hostname.",
+                error=error,
+            )
 
     def _setup_networkd(self, *, executor: Executor) -> None:
         """Configure networkd and start it.
@@ -242,19 +271,25 @@ class BuilddImage(Image):
             file_mode="0644",
         )
 
-        executor.execute_run(
-            ["systemctl", "enable", "systemd-networkd"],
-            capture_output=True,
-            check=True,
-            env=self.command_env,
-        )
+        try:
+            executor.execute_run(
+                ["systemctl", "enable", "systemd-networkd"],
+                capture_output=True,
+                check=True,
+                env=self.command_env,
+            )
 
-        executor.execute_run(
-            ["systemctl", "restart", "systemd-networkd"],
-            check=True,
-            capture_output=True,
-            env=self.command_env,
-        )
+            executor.execute_run(
+                ["systemctl", "restart", "systemd-networkd"],
+                check=True,
+                capture_output=True,
+                env=self.command_env,
+            )
+        except subprocess.CalledProcessError as error:
+            raise errors.CraftEnvironmentError.from_called_process_error(
+                brief="Failed to setup systemd-networkd.",
+                error=error,
+            )
 
     def _setup_resolved(self, *, executor: Executor) -> None:
         """Configure system-resolved to manage resolve.conf.
@@ -262,29 +297,37 @@ class BuilddImage(Image):
         :param executor: Executor for target container.
         :param timeout_secs: Timeout in seconds.
         """
-        executor.execute_run(
-            [
-                "ln",
-                "-sf",
-                "/run/systemd/resolve/resolv.conf",
-                "/etc/resolv.conf",
-            ],
-            check=True,
-        )
+        try:
+            executor.execute_run(
+                [
+                    "ln",
+                    "-sf",
+                    "/run/systemd/resolve/resolv.conf",
+                    "/etc/resolv.conf",
+                ],
+                check=True,
+                capture_output=True,
+                env=self.command_env,
+            )
 
-        executor.execute_run(
-            ["systemctl", "enable", "systemd-resolved"],
-            check=True,
-            capture_output=True,
-            env=self.command_env,
-        )
+            executor.execute_run(
+                ["systemctl", "enable", "systemd-resolved"],
+                check=True,
+                capture_output=True,
+                env=self.command_env,
+            )
 
-        executor.execute_run(
-            ["systemctl", "restart", "systemd-resolved"],
-            check=True,
-            capture_output=True,
-            env=self.command_env,
-        )
+            executor.execute_run(
+                ["systemctl", "restart", "systemd-resolved"],
+                check=True,
+                capture_output=True,
+                env=self.command_env,
+            )
+        except subprocess.CalledProcessError as error:
+            raise errors.CraftEnvironmentError.from_called_process_error(
+                brief="Failed to setup systemd-resolved.",
+                error=error,
+            )
 
     def _setup_snapd(self, *, executor: Executor) -> None:
         """Install snapd and dependencies and wait until ready.
@@ -292,58 +335,64 @@ class BuilddImage(Image):
         :param executor: Executor for target container.
         :param timeout_secs: Timeout in seconds.
         """
-        executor.execute_run(
-            [
-                "apt-get",
-                "install",
-                "fuse",
-                "udev",
-                "--yes",
-            ],
-            check=True,
-            capture_output=True,
-            env=self.command_env,
-        )
+        try:
+            executor.execute_run(
+                [
+                    "apt-get",
+                    "install",
+                    "fuse",
+                    "udev",
+                    "--yes",
+                ],
+                check=True,
+                capture_output=True,
+                env=self.command_env,
+            )
 
-        executor.execute_run(
-            ["systemctl", "enable", "systemd-udevd"],
-            capture_output=True,
-            check=True,
-            env=self.command_env,
-        )
-        executor.execute_run(
-            ["systemctl", "start", "systemd-udevd"],
-            capture_output=True,
-            check=True,
-            env=self.command_env,
-        )
-        executor.execute_run(
-            ["apt-get", "install", "snapd", "--yes"],
-            capture_output=True,
-            check=True,
-            env=self.command_env,
-        )
-        executor.execute_run(
-            ["systemctl", "start", "snapd.socket"],
-            capture_output=True,
-            check=True,
-            env=self.command_env,
-        )
+            executor.execute_run(
+                ["systemctl", "enable", "systemd-udevd"],
+                capture_output=True,
+                check=True,
+                env=self.command_env,
+            )
+            executor.execute_run(
+                ["systemctl", "start", "systemd-udevd"],
+                capture_output=True,
+                check=True,
+                env=self.command_env,
+            )
+            executor.execute_run(
+                ["apt-get", "install", "snapd", "--yes"],
+                capture_output=True,
+                check=True,
+                env=self.command_env,
+            )
+            executor.execute_run(
+                ["systemctl", "start", "snapd.socket"],
+                capture_output=True,
+                check=True,
+                env=self.command_env,
+            )
 
-        # Restart, not start, the service in case the environment
-        # has changed and the service is already running.
-        executor.execute_run(
-            ["systemctl", "restart", "snapd.service"],
-            capture_output=True,
-            check=True,
-            env=self.command_env,
-        )
-        executor.execute_run(
-            ["snap", "wait", "system", "seed.loaded"],
-            capture_output=True,
-            check=True,
-            env=self.command_env,
-        )
+            # Restart, not start, the service in case the environment
+            # has changed and the service is already running.
+            executor.execute_run(
+                ["systemctl", "restart", "snapd.service"],
+                capture_output=True,
+                check=True,
+                env=self.command_env,
+            )
+            executor.execute_run(
+                ["snap", "wait", "system", "seed.loaded"],
+                capture_output=True,
+                check=True,
+                env=self.command_env,
+            )
+        except subprocess.CalledProcessError as error:
+            raise errors.CraftEnvironmentError.from_called_process_error(
+                brief="Failed to setup snapd.",
+                error=error,
+            )
 
     def _setup_wait_for_network(
         self, *, executor: Executor, timeout_secs: int = 60
@@ -367,7 +416,9 @@ class BuilddImage(Image):
 
             sleep(0.5)
         else:
-            logger.warning("Failed to setup networking.")
+            raise errors.CraftEnvironmentError(
+                brief="Timed out waiting for neworking.",
+            )
 
     def _setup_wait_for_system_ready(
         self, *, executor: Executor, retry_count=120, retry_interval: float = 0.5
@@ -393,7 +444,9 @@ class BuilddImage(Image):
             logger.debug("systemctl is-system-running status: %s", running_state)
             sleep(retry_interval)
         else:
-            logger.warning("System exceeded timeout to get ready.")
+            raise errors.CraftEnvironmentError(
+                brief="Timed out waiting for environment to be ready.",
+            )
 
     def wait_until_ready(self, *, executor: Executor) -> None:
         """Wait until system is ready.
