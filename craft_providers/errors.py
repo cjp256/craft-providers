@@ -27,16 +27,17 @@ def details_from_called_process_error(
 
     :returns: Details string.
     """
+    cmd_string = shlex.join(error.cmd)
     details = [
-        f"Failed to execute command: {shlex.join(error.cmd)}",
-        f"Exit code: {error.returncode}",
+        f"* Command that failed: {cmd_string}",
+        f"* Command exit code: {error.returncode}",
     ]
 
     if error.stdout:
-        details.append(f"Output:\n{error.stdout}")
+        details.append(f"* Command output: {error.stdout}")
 
     if error.stderr:
-        details.append(f"Standard Error Output:\n{error.stderr}")
+        details.append(f"* Command standard error output: {error.stderr}")
 
     return "\n".join(details)
 
@@ -79,4 +80,4 @@ class ProviderError(Exception):
         """
         details = details_from_called_process_error(error)
 
-        return cls(brief=brief, details="\n".join(details), resolution=resolution)
+        return cls(brief=brief, details=details, resolution=resolution)
