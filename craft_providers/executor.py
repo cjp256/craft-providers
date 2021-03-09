@@ -1,4 +1,4 @@
-# Copyright (C) 2021 Canonical Ltd
+# Copyright 2021 Canonical Ltd.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 3 as
@@ -35,18 +35,18 @@ class Executor(ABC):
         group: str = "root",
         user: str = "root",
     ) -> None:
-        """Create file with content and file mode.
+        """Create a file with specified content and file mode.
 
         :param destination: Path to file.
         :param content: Contents of file.
         :param file_mode: File mode string (e.g. '0644').
-        :param group: File owner group ID.
-        :param user: Filer owner user ID.
+        :param group: File owner group.
+        :param user: File owner user.
         """
 
     @abstractmethod
     def execute_popen(self, command: List[str], **kwargs) -> subprocess.Popen:
-        """Execute command in instance, using subprocess.Popen().
+        """Execute a command in instance, using subprocess.Popen().
 
         :param command: Command to execute.
         :param kwargs: Additional keyword arguments to pass.
@@ -56,7 +56,7 @@ class Executor(ABC):
 
     @abstractmethod
     def execute_run(self, command: List[str], **kwargs) -> subprocess.CompletedProcess:
-        """Execute command using subprocess.run().
+        """Execute a command using subprocess.run().
 
         :param command: Command to execute.
         :param kwargs: Keyword args to pass to subprocess.run().
@@ -68,27 +68,27 @@ class Executor(ABC):
         """
 
     @abstractmethod
-    def pull(self, *, source: pathlib.Path, destination: pathlib.Path) -> None:
-        """Copy source file/directory from environment to host destination.
+    def pull_file(self, *, source: pathlib.Path, destination: pathlib.Path) -> None:
+        """Copy a file from the environment to host.
 
-        Providing this as an abstract method allows the provider to implement
-        the most performant option available.
+        :param source: Environment file to copy.
+        :param destination: Host file path to copy to.  Parent directory
+            (destination.parent) must exist.
 
-        The destination must be an existing directory.
-
-        :param source: Target environment file/directory to copy.
-        :param destination: Host destination directory to copy to.
+        :raises FileNotFound: If source file or destination's parent directory
+            does not exist.
+        :raises OSError: On error copying file.
         """
 
     @abstractmethod
-    def push(self, *, source: pathlib.Path, destination: pathlib.Path) -> None:
-        """Copy host source file/directory into environment at destination.
+    def push_file(self, *, source: pathlib.Path, destination: pathlib.Path) -> None:
+        """Copy a file from the host into the environment.
 
-        Providing this as an abstract method allows the provider to implement
-        the most performant option available.
+        :param source: Host file to copy.
+        :param destination: Target environment file path to copy to.  Parent
+            directory (destination.parent) must exist.
 
-        The destination must be an existing directory.
-
-        :param source: Host file/directory to copy.
-        :param destination: Target environment destination directory to copy to.
+        :raises FileNotFound: If source file or destination's parent directory
+            does not exist.
+        :raises OSError: On error copying file.
         """
