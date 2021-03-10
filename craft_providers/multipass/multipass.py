@@ -51,7 +51,7 @@ class Multipass:
         """Execute command in instance_name, allowing output to console."""
         command = [str(self.multipass_path), *command]
 
-        logger.warning("Executing on host: %s", shlex.join(command))
+        logger.debug("Executing on host: %s", shlex.join(command))
         return subprocess.run(command, check=check, **kwargs)
 
     def delete(self, *, instance_name: str, purge=True) -> None:
@@ -93,7 +93,7 @@ class Multipass:
         final_cmd = [str(self.multipass_path), "exec", instance_name, "--", *command]
 
         quoted_final_cmd = shlex.join(final_cmd)
-        logger.warning("Executing on host: %s", quoted_final_cmd)
+        logger.debug("Executing on host: %s", quoted_final_cmd)
 
         return runner(final_cmd, **kwargs)  # pylint: disable=subprocess-run-check
 
@@ -174,6 +174,46 @@ class Multipass:
         data_list = json.loads(proc.stdout).get("list", dict())
         return [instance["name"] for instance in data_list]
 
+    def mount(
+        self,
+        *,
+        source: pathlib.Path,
+        target: str,
+        uid_map: Dict[str, str] = None,
+        gid_map: Dict[str, str] = None,
+    ) -> None:
+        """Mount host source path to target.
+
+        :param source: Path of local directory to mount.
+        :param target: Target mount points, in <name>[:<path>] format, where
+            <name> is an instance name, and optional <path> is the mount point.
+            If omitted, the mount point will be the same as the source's
+            absolute path.
+        :param uid_map: A mapping of user IDs for use in the mount of the form
+            <host-id> -> <instance-name-id>.  File and folder ownership will be
+            mapped from <host> to <instance-name> inside the instance_name.
+        :param gid_map: A mapping of group IDs for use in the mount of the form
+            <host-id> -> <instance-name-id>.  File and folder ownership will be
+            mapped from <host> to <instance-name> inside the instance_name.
+        """
+        command = ["mount", str(source), target]
+
+        if uid_map is not None:
+            for host_id, instance_id in uid_map.items():
+                command.extend(["--uid-map", f"{host_id}:{instance_id}"])
+
+        if gid_map is not None:
+            for host_id, instance_id in gid_map.items():
+                command.extend(["--gid-map", f"{host_id}:{instance_id}"])
+
+        try:
+            self._run(command, capture_output=True, check=True)
+        except subprocess.CalledProcessError as error:
+            raise MultipassError.from_called_process_error(
+                brief=f"Failed to mount {str(source)!r} to {target!r}.",
+                error=error,
+            )
+
     def start(self, *, instance_name: str) -> None:
         """Start VM instance.
 
@@ -213,65 +253,6 @@ class Multipass:
                 brief=f"Failed to stop VM {instance_name!r}.",
                 error=error,
             )
-
-    def mount(
-        self,
-        *,
-        source: pathlib.Path,
-        target: str,
-        uid_map: Dict[str, str] = None,
-        gid_map: Dict[str, str] = None,
-    ) -> None:
-        """Mount host source path to target.
-
-        :param source: Path of local directory to mount.
-        :param target: Target mount points, in <name>[:<path>] format, where
-            <name> is an instance name, and optional <path> is the mount point.
-            If omitted, the mount point will be the same as the source's
-            absolute path.
-        :param uid_map: A mapping of user IDs for use in the mount of the form
-            <host-id> -> <instance-name-id>.  File and folder ownership will be
-            mapped from <host> to <instance-name> inside the instance_name.
-        :param gid_map: A mapping of group IDs for use in the mount of the form
-            <host-id> -> <instance-name-id>.  File and folder ownership will be
-            mapped from <host> to <instance-name> inside the instance_name.
-        """
-        command = ["mount", str(source), target]
-
-        if uid_map is not None:
-            for host_id, instance_id in uid_map.items():
-                command.extend(["--uid-map", f"{host_id}:{instance_id}"])
-
-        if gid_map is not None:
-            for host_id, instance_id in gid_map.items():
-                command.extend(["--gid-map", f"{host_id}:{instance_id}"])
-
-        try:
-            self._run(command, capture_output=True, check=True)
-        except subprocess.CalledProcessError as error:
-            raise MultipassError.from_called_process_error(
-                brief=f"Failed to mount {source!r} to {target!r}.",
-                error=error,
-            )
-
-    def umount(self, *, mount: str) -> None:
-        """Unmount target in VM.
-
-        :param mount: Mount point in <name>[:<path>] format, where <name> are
-            instance names, and optional <path> are mount points.  If omitted,
-            all mounts will be removed from the name instance.
-
-        :raises MultipassError: On error.
-        """
-        command = ["umount", mount]
-
-        try:
-            self._run(command, capture_output=True, check=True)
-        except subprocess.CalledProcessError as error:
-            raise MultipassError.from_called_process_error(
-                brief=f"Failed to unmount {mount!r}.",
-                error=error,
-            ) from error
 
     def transfer(self, *, source: str, destination: str) -> None:
         """Transfer to destination path with source IO.
@@ -390,3 +371,22 @@ class Multipass:
                     brief=f"Failed to transfer file {destination!r} to source.",
                     details=f"Failed to execute: {quoted_command}\nReturn code:{proc.returncode}",
                 )
+
+    def umount(self, *, mount: str) -> None:
+        """Unmount target in VM.
+
+        :param mount: Mount point in <name>[:<path>] format, where <name> are
+            instance names, and optional <path> are mount points.  If omitted,
+            all mounts will be removed from the name instance.
+
+        :raises MultipassError: On error.
+        """
+        command = ["umount", mount]
+
+        try:
+            self._run(command, capture_output=True, check=True)
+        except subprocess.CalledProcessError as error:
+            raise MultipassError.from_called_process_error(
+                brief=f"Failed to unmount {mount!r}.",
+                error=error,
+            ) from error

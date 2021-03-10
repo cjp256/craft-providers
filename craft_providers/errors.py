@@ -17,6 +17,8 @@ import shlex
 import subprocess
 from typing import Optional
 
+import attr
+
 
 def details_from_called_process_error(
     error: subprocess.CalledProcessError,
@@ -28,6 +30,7 @@ def details_from_called_process_error(
     :returns: Details string.
     """
     cmd_string = shlex.join(error.cmd)
+
     details = [
         f"* Command that failed: {cmd_string}",
         f"* Command exit code: {error.returncode}",
@@ -42,6 +45,7 @@ def details_from_called_process_error(
     return "\n".join(details)
 
 
+@attr.s(auto_attribs=True)
 class ProviderError(Exception):
     """Unexpected error.
 
@@ -50,20 +54,20 @@ class ProviderError(Exception):
     :param resolution: Recommendation, if any.
     """
 
-    def __init__(
-        self,
-        brief: str,
-        details: Optional[str] = None,
-        resolution: Optional[str] = None,
-    ):
-        super().__init__()
-
-        self.brief = brief
-        self.details = details
-        self.resolution = resolution
+    brief: str
+    details: Optional[str] = None
+    resolution: Optional[str] = None
 
     def __str__(self) -> str:
-        return self.brief
+        parts = [self.brief]
+
+        if self.details:
+            parts.append(self.details)
+
+        if self.resolution:
+            parts.append(self.resolution)
+
+        return "\n".join(parts)
 
     @classmethod
     def from_called_process_error(

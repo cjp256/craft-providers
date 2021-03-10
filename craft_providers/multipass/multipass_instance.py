@@ -283,75 +283,61 @@ class MultipassInstance(Executor):
             gid_map=gid_map,
         )
 
-    def pull(self, *, source: pathlib.Path, destination: pathlib.Path) -> None:
-        """Copy source file/directory from environment to host destination.
+    def pull_file(self, *, source: pathlib.Path, destination: pathlib.Path) -> None:
+        """Copy a file from the environment to host.
 
-        Standard "cp -r" rules apply:
+        :param source: Environment file to copy.
+        :param destination: Host file path to copy to.  Parent directory
+            (destination.parent) must exist.
 
-            - if source is directory, copy happens recursively.
-
-            - if destination exists, source will be copied into destination.
-
-        Providing this as an abstract method allows the provider to implement
-        the most performant option available.
-
-        :param source: Target directory to copy from.
-        :param destination: Host destination directory to copy to.
-
-        :raises FileNotFoundError: If source does not exist.
+        :raises FileNotFoundError: If source file or destination's parent
+            directory does not exist.
+        :raises ProviderError: On error copying file.
         """
-        logger.info("Syncing env:%s -> host:%s...", source, destination)
+        logger.debug("Syncing env:%s -> host:%s...", source, destination)
 
         # TODO: check if mount makes source == destination, skip if so.
-        if linux.is_target_file(executor=self, target=source):
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            self._multipass.transfer(
-                source=f"{self.name}:{source!s}", destination=str(destination)
-            )
-        elif linux.is_target_directory(executor=self, target=source):
-            linux.directory_sync_from_remote(
-                executor=self, source=source, destination=destination
-            )
-        else:
-            raise FileNotFoundError(f"Source {source} not found.")
+        if not linux.is_target_file(executor=self, target=source):
+            raise FileNotFoundError(f"File not found: {str(destination)!r}")
 
-    def push(self, *, source: pathlib.Path, destination: pathlib.Path) -> None:
-        """Copy host source file/directory into environment at destination.
+        if not destination.parent.is_dir():
+            raise FileNotFoundError(f"Directory not found: {str(destination.parent)!r}")
 
-        Standard "cp -r" rules apply:
-        - if source is directory, copy happens recursively.
-        - if destination exists, source will be copied into destination.
+        self._multipass.transfer(
+            source=f"{self.name}:{source!s}", destination=str(destination)
+        )
 
-        Providing this as an abstract method allows the provider to implement
-        the most performant option available.
+    def push_file(self, *, source: pathlib.Path, destination: pathlib.Path) -> None:
+        """Copy a file from the host into the environment.
 
-        :param source: Host directory to copy.
-        :param destination: Target destination directory to copy to.
+        :param source: Host file to copy.
+        :param destination: Target environment file path to copy to.  Parent
+            directory (destination.parent) must exist.
 
-        :raises FileNotFoundError: If source does not exist.
+        :raises FileNotFoundError: If source file or destination's parent
+            directory does not exist.
+        :raises ProviderError: On error copying file.
         """
-        # TODO: check if mounted, skip sync if source == destination
-        logger.info("Syncing host:%s -> env:%s...", source, destination)
-        if source.is_file():
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            self._multipass.transfer(
-                source=str(source),
-                destination=f"{self.name}:{destination!s}",
-            )
-        elif source.is_dir():
-            # TODO: use mount() if available
-            linux.directory_sync_to_remote(
-                executor=self, source=source, destination=destination, delete=True
-            )
-        else:
-            raise FileNotFoundError(f"Source {source} not found.")
+        if not source.is_file():
+            raise FileNotFoundError(f"File not found: {str(destination)!r}")
+
+        if not linux.is_target_directory(executor=self, target=destination.parent):
+            raise FileNotFoundError(f"Directory no found: {str(destination.parent)!r}")
+
+        self._multipass.transfer(
+            source=str(source),
+            destination=f"{self.name}:{destination!s}",
+        )
 
     def start(self) -> None:
         """Start instance."""
         self._multipass.start(instance_name=self.name)
 
     def stop(self, delay_mins: int = 0) -> None:
-        """Stop instance."""
+        """Stop instance.
+
+        :param delay_mins: Delay shutdown for specified minutes.
+        """
         self._multipass.stop(instance_name=self.name, delay_mins=delay_mins)
 
     def supports_mount(self) -> bool:

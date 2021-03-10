@@ -18,16 +18,6 @@ import subprocess
 import pytest
 
 
-def test_exec(instance, multipass):
-    proc = multipass.exec(
-        instance_name=instance.name,
-        command=["echo", "this is a test"],
-        capture_output=True,
-    )
-
-    assert proc.stdout == b"this is a test\n"
-
-
 def test_delete(instance, multipass):
     multipass.delete(instance_name=instance.name, purge=False)
 
@@ -42,6 +32,16 @@ def test_delete_purge(instance, multipass):
     instances = multipass.list()
 
     assert instance.name not in instances
+
+
+def test_exec(instance, multipass):
+    proc = multipass.exec(
+        instance_name=instance.name,
+        command=["echo", "this is a test"],
+        capture_output=True,
+    )
+
+    assert proc.stdout == b"this is a test\n"
 
 
 def test_list(instance, multipass):

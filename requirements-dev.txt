@@ -11,6 +11,7 @@ pydocstyle
 pylint
 pytest
 pytest-runner
+pytest-subprocess@git+git://github.com/aklajnert/pytest-subprocess@cf0de43f37eb29523330b3c77f4bfde488ec046e
 pyyaml
 sphinx
 sphinx-autodoc-typehints
