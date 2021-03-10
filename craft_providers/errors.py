@@ -15,9 +15,40 @@
 """Craft provider errors."""
 import shlex
 import subprocess
-from typing import Optional
+from typing import List, Optional
 
 import attr
+
+
+def details_from_command_error(
+    *,
+    cmd: List[str],
+    returncode: int,
+    stdout: Optional[bytes] = None,
+    stderr: Optional[bytes] = None,
+) -> str:
+    """Create a consistent ProviderError from Popen command errors.
+
+    :param cmd: Command executed.
+    :param stdout: Optional stdout to include.
+    :param stderr: Optional stderr to include.
+
+    :returns: Details string.
+    """
+    cmd_string = shlex.join(cmd)
+
+    details = [
+        f"* Command that failed: {cmd_string}",
+        f"* Command exit code: {returncode}",
+    ]
+
+    if stdout:
+        details.append(f"* Command output: {stdout!r}")
+
+    if stderr:
+        details.append(f"* Command standard error output: {stderr!r}")
+
+    return "\n".join(details)
 
 
 def details_from_called_process_error(
@@ -29,20 +60,12 @@ def details_from_called_process_error(
 
     :returns: Details string.
     """
-    cmd_string = shlex.join(error.cmd)
-
-    details = [
-        f"* Command that failed: {cmd_string}",
-        f"* Command exit code: {error.returncode}",
-    ]
-
-    if error.stdout:
-        details.append(f"* Command output: {error.stdout}")
-
-    if error.stderr:
-        details.append(f"* Command standard error output: {error.stderr}")
-
-    return "\n".join(details)
+    return details_from_command_error(
+        cmd=error.cmd,
+        stdout=error.stdout,
+        stderr=error.stderr,
+        returncode=error.returncode,
+    )
 
 
 @attr.s(auto_attribs=True)

@@ -11,9 +11,11 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
+import io
 import json
 import pathlib
 import subprocess
+from unittest import mock
 
 import pytest
 
@@ -96,7 +98,7 @@ def test_delete_purge(fake_process):
     assert len(fake_process.calls) == 1
 
 
-def test_delete_failure(fake_process):
+def test_delete_error(fake_process):
     fake_process.register_subprocess(
         ["multipass", "delete", "test-instance", "--purge"],
         returncode=1,
@@ -121,7 +123,7 @@ def test_exec(fake_process):
     assert len(fake_process.calls) == 1
 
 
-def test_exec_failure_no_check(fake_process):
+def test_exec_error_no_check(fake_process):
     fake_process.register_subprocess(
         ["multipass", "exec", "test-instance", "--", "false"],
         returncode=1,
@@ -132,7 +134,7 @@ def test_exec_failure_no_check(fake_process):
     assert proc.returncode == 1
 
 
-def test_exec_failure_with_check(fake_process):
+def test_exec_error_with_check(fake_process):
     fake_process.register_subprocess(
         ["multipass", "exec", "test-instance", "--", "false"],
         returncode=1,
@@ -163,10 +165,10 @@ def test_info_no_vm(fake_process):
     data = Multipass().info(instance_name="test-instance")
 
     assert len(fake_process.calls) == 1
-    assert data == None
+    assert data is None
 
 
-def test_info_failure(fake_process):
+def test_info_error(fake_process):
     fake_process.register_subprocess(
         ["multipass", "info", "test-instance", "--format", "json"], returncode=1
     )
@@ -186,7 +188,7 @@ def test_launch(fake_process):
         ["multipass", "launch", "test-image", "--name", "test-instance"]
     )
 
-    data = Multipass().launch(image="test-image", instance_name="test-instance")
+    Multipass().launch(image="test-image", instance_name="test-instance")
 
     assert len(fake_process.calls) == 1
 
@@ -208,7 +210,7 @@ def test_launch_all_opts(fake_process):
         ]
     )
 
-    data = Multipass().launch(
+    Multipass().launch(
         image="test-image",
         instance_name="test-instance",
         cpus="4",
@@ -219,7 +221,7 @@ def test_launch_all_opts(fake_process):
     assert len(fake_process.calls) == 1
 
 
-def test_launch_failure(fake_process):
+def test_launch_error(fake_process):
     fake_process.register_subprocess(
         ["multipass", "launch", "test-image", "--name", "test-instance"], returncode=1
     )
@@ -245,7 +247,7 @@ def test_list(fake_process):
     assert vm_list == ["manageable-snipe", "flowing-hawfinch"]
 
 
-def test_list_failure(fake_process):
+def test_list_error(fake_process):
     fake_process.register_subprocess(
         ["multipass", "list", "--format", "json"], returncode=1
     )
@@ -284,22 +286,26 @@ def test_mount_all_opts(fake_process):
             "test-instance:/mnt",
             "--uid-map",
             "1:2",
-            "--gid-map",
+            "--uid-map",
             "3:4",
+            "--gid-map",
+            "5:6",
+            "--gid-map",
+            "7:8",
         ]
     )
 
     Multipass().mount(
         source=pathlib.Path("/home/user/my-project"),
         target="test-instance:/mnt",
-        uid_map={"1": "2"},
-        gid_map={"3": "4"},
+        uid_map={"1": "2", "3": "4"},
+        gid_map={"5": "6", "7": "8"},
     )
 
     assert len(fake_process.calls) == 1
 
 
-def test_mount_failure(fake_process):
+def test_mount_error(fake_process):
     fake_process.register_subprocess(
         ["multipass", "mount", "/home/user/my-project", "test-instance:/mnt"],
         returncode=1,
@@ -315,4 +321,255 @@ def test_mount_failure(fake_process):
     assert exc_info.value == MultipassError(
         brief="Failed to mount '/home/user/my-project' to 'test-instance:/mnt'.",
         details="* Command that failed: multipass mount /home/user/my-project test-instance:/mnt\n* Command exit code: 1",
+    )
+
+
+def test_start(fake_process):
+    fake_process.register_subprocess(["multipass", "start", "test-instance"])
+
+    Multipass().start(instance_name="test-instance")
+
+    assert len(fake_process.calls) == 1
+
+
+def test_start_error(fake_process):
+    fake_process.register_subprocess(
+        ["multipass", "start", "test-instance"], returncode=1
+    )
+
+    with pytest.raises(MultipassError) as exc_info:
+        Multipass().start(instance_name="test-instance")
+
+    assert len(fake_process.calls) == 1
+    assert exc_info.value == MultipassError(
+        brief="Failed to start VM 'test-instance'.",
+        details="* Command that failed: multipass start test-instance\n* Command exit code: 1",
+    )
+
+
+def test_stop(fake_process):
+    fake_process.register_subprocess(["multipass", "stop", "test-instance"])
+
+    Multipass().stop(instance_name="test-instance")
+
+    assert len(fake_process.calls) == 1
+
+
+def test_stop_all_opts(fake_process):
+    fake_process.register_subprocess(
+        ["multipass", "stop", "--time", "5", "test-instance"]
+    )
+
+    Multipass().stop(instance_name="test-instance", delay_mins=5)
+
+    assert len(fake_process.calls) == 1
+
+
+def test_stop_error(fake_process):
+    fake_process.register_subprocess(
+        ["multipass", "stop", "test-instance"], returncode=1
+    )
+
+    with pytest.raises(MultipassError) as exc_info:
+        Multipass().stop(instance_name="test-instance")
+
+    assert len(fake_process.calls) == 1
+    assert exc_info.value == MultipassError(
+        brief="Failed to stop VM 'test-instance'.",
+        details="* Command that failed: multipass stop test-instance\n* Command exit code: 1",
+    )
+
+
+def test_transfer(fake_process):
+    fake_process.register_subprocess(
+        ["multipass", "transfer", "test-instance:/test1", "/test2"]
+    )
+
+    Multipass().transfer(source="test-instance:/test1", destination="/test2")
+
+    assert len(fake_process.calls) == 1
+
+
+def test_transfer_error(fake_process):
+    fake_process.register_subprocess(
+        ["multipass", "transfer", "test-instance:/test1", "/test2"], returncode=1
+    )
+
+    with pytest.raises(MultipassError) as exc_info:
+        Multipass().transfer(source="test-instance:/test1", destination="/test2")
+
+    assert len(fake_process.calls) == 1
+    assert exc_info.value == MultipassError(
+        brief="Failed to transfer 'test-instance:/test1' to '/test2'.",
+        details="* Command that failed: multipass transfer test-instance:/test1 /test2\n* Command exit code: 1",
+    )
+
+
+def test_transfer_destination_io(fake_process):
+    stream = mock.Mock()
+    fake_process.register_subprocess(
+        ["multipass", "transfer", "test-instance:/test1", "-"], stdout=b"Hello World!\n"
+    )
+
+    Multipass().transfer_destination_io(
+        source="test-instance:/test1", destination=stream
+    )
+
+    assert len(fake_process.calls) == 1
+    assert stream.mock_calls == [mock.call.write(b"Hello World!\n")]
+
+
+def test_transfer_destination_io_chunk_size(fake_process):
+    stream = mock.Mock()
+    fake_process.register_subprocess(
+        ["multipass", "transfer", "test-instance:/test1", "-"], stdout=b"Hello World!\n"
+    )
+
+    Multipass().transfer_destination_io(
+        source="test-instance:/test1", destination=stream, chunk_size=4
+    )
+
+    assert len(fake_process.calls) == 1
+    assert stream.mock_calls == [
+        mock.call.write(b"Hell"),
+        mock.call.write(b"o Wo"),
+        mock.call.write(b"rld!"),
+        mock.call.write(b"\n"),
+    ]
+
+
+@mock.patch("subprocess.Popen")
+def test_transfer_destination_io_error(mock_popen):
+    mock_popen.return_value.communicate.side_effect = [
+        subprocess.TimeoutExpired(cmd="...", timeout=30),
+        (b"", b""),
+    ]
+    mock_popen.return_value.returncode = -1
+
+    stream = mock.Mock()
+
+    with pytest.raises(MultipassError) as exc_info:
+        Multipass().transfer_destination_io(
+            source="test-instance:/test1", destination=stream
+        )
+
+    assert exc_info.value == MultipassError(
+        brief="Failed to transfer file 'test-instance:/test1'.",
+        details="* Command that failed: multipass transfer test-instance:/test1 -\n* Command exit code: -1",
+    )
+    assert mock_popen.mock_calls == [
+        mock.call(
+            ["multipass", "transfer", "test-instance:/test1", "-"], stdin=-3, stdout=-1
+        ),
+        mock.call().stdout.read(4096),
+        mock.call().stdout.read().__bool__(),
+        mock.call().stdout.read().__len__(),
+        mock.call().communicate(timeout=30),
+        mock.call().kill(),
+        mock.call().communicate(),
+    ]
+    assert stream.mock_calls == [
+        mock.call.write(mock.ANY),
+    ]
+
+
+@mock.patch("subprocess.Popen")
+def test_transfer_source_io(mock_popen):
+    mock_popen.return_value.communicate.return_value = b"", b""
+    mock_popen.return_value.returncode = 0
+
+    test_io = io.BytesIO(b"Hello World!\n")
+
+    Multipass().transfer_source_io(
+        source=test_io,
+        destination="test-instance:/tmp/foo",
+    )
+
+    assert mock_popen.mock_calls == [
+        mock.call(
+            ["multipass", "transfer", "-", "test-instance:/tmp/foo"],
+            stdin=-1,
+        ),
+        mock.call().stdin.write(b"Hello World!\n"),
+        mock.call().communicate(timeout=30),
+    ]
+
+
+@mock.patch("subprocess.Popen")
+def test_transfer_source_io_chunk_size(mock_popen):
+    mock_popen.return_value.communicate.return_value = b"", b""
+    mock_popen.return_value.returncode = 0
+
+    test_io = io.BytesIO(b"Hello World!\n")
+
+    Multipass().transfer_source_io(
+        source=test_io,
+        destination="test-instance:/tmp/foo",
+        chunk_size=4,
+    )
+
+    assert mock_popen.mock_calls == [
+        mock.call(
+            ["multipass", "transfer", "-", "test-instance:/tmp/foo"],
+            stdin=-1,
+        ),
+        mock.call().stdin.write(b"Hell"),
+        mock.call().stdin.write(b"o Wo"),
+        mock.call().stdin.write(b"rld!"),
+        mock.call().stdin.write(b"\n"),
+        mock.call().communicate(timeout=30),
+    ]
+
+
+@mock.patch("subprocess.Popen")
+def test_transfer_source_io_error(mock_popen):
+    mock_popen.return_value.communicate.side_effect = [
+        subprocess.TimeoutExpired(cmd="...", timeout=30),
+        (b"", b""),
+    ]
+    mock_popen.return_value.returncode = -1
+    test_io = io.BytesIO(b"Hello World!\n")
+
+    with pytest.raises(MultipassError) as exc_info:
+        Multipass().transfer_source_io(
+            source=test_io,
+            destination="test-instance:/tmp/foo",
+        )
+
+    assert exc_info.value == MultipassError(
+        brief="Failed to transfer file to destination 'test-instance:/tmp/foo'.",
+        details="* Command that failed: multipass transfer - test-instance:/tmp/foo\n* Command exit code: -1",
+    )
+    assert mock_popen.mock_calls == [
+        mock.call(
+            ["multipass", "transfer", "-", "test-instance:/tmp/foo"],
+            stdin=-1,
+        ),
+        mock.call().stdin.write(b"Hello World!\n"),
+        mock.call().communicate(timeout=30),
+        mock.call().kill(),
+        mock.call().communicate(),
+    ]
+
+
+def test_umount(fake_process):
+    fake_process.register_subprocess(["multipass", "umount", "test-instance:/mnt"])
+
+    Multipass().umount(mount="test-instance:/mnt")
+
+    assert len(fake_process.calls) == 1
+
+
+def test_umount_error(fake_process):
+    fake_process.register_subprocess(
+        ["multipass", "umount", "test-instance:/mnt"], returncode=1
+    )
+
+    with pytest.raises(MultipassError) as exc_info:
+        Multipass().umount(mount="test-instance:/mnt")
+
+    assert len(fake_process.calls) == 1
+    assert exc_info.value == MultipassError(
+        brief="Failed to unmount 'test-instance:/mnt'.",
+        details="* Command that failed: multipass umount test-instance:/mnt\n* Command exit code: 1",
     )

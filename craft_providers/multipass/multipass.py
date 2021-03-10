@@ -25,6 +25,8 @@ import shlex
 import subprocess
 from typing import Any, Dict, List, Optional
 
+from craft_providers import errors
+
 from .errors import MultipassError
 
 logger = logging.getLogger(__name__)
@@ -298,33 +300,27 @@ class Multipass:
         assert proc.stdout is not None
 
         while True:
-            written = proc.stdout.read(chunk_size)
-            if written:
-                destination.write(written)
+            data = proc.stdout.read(chunk_size)
+            if data:
+                destination.write(data)
 
-            if len(written) < chunk_size:
+            if len(data) < chunk_size:
                 logger.debug("Finished streaming standard output")
                 break
 
-        while True:
-            try:
-                out, _ = proc.communicate(timeout=1)
-            except subprocess.TimeoutExpired:
-                continue
+        try:
+            _, stderr = proc.communicate(timeout=30)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            _, stderr = proc.communicate()
 
-            if out:
-                destination.write(out)
-
-            if proc.returncode == 0:
-                logger.debug("Process completed")
-                break
-
-            if proc.returncode is not None:
-                quoted_command = shlex.join(command)
-                raise MultipassError(
-                    brief=f"Failed to transfer file {source!r} to destination.",
-                    details=f"Failed to execute: {quoted_command}\nReturn code:{proc.returncode}",
-                )
+        if proc.returncode != 0:
+            raise MultipassError(
+                brief=f"Failed to transfer file {source!r}.",
+                details=errors.details_from_command_error(
+                    cmd=command, stderr=stderr, returncode=proc.returncode
+                ),
+            )
 
     def transfer_source_io(
         self, *, source: io.BufferedIOBase, destination: str, chunk_size: int = 4096
@@ -346,31 +342,28 @@ class Multipass:
         assert proc.stdin is not None
 
         while True:
-            buf = source.read(chunk_size)
-            if buf:
-                proc.stdin.write(buf)
+            data = source.read(chunk_size)
+            if data:
+                proc.stdin.write(data)
 
-            if buf is None or len(buf) < chunk_size:
+            if len(data) < chunk_size:
                 logger.debug("Finished streaming source file")
                 break
 
         # Wait until process is complete.
-        while True:
-            try:
-                _, _ = proc.communicate(timeout=1)
-            except subprocess.TimeoutExpired:
-                pass
+        try:
+            _, stderr = proc.communicate(timeout=30)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            _, stderr = proc.communicate()
 
-            if proc.returncode == 0:
-                logger.debug("Process completed")
-                break
-
-            if proc.returncode is not None:
-                quoted_command = shlex.join(command)
-                raise MultipassError(
-                    brief=f"Failed to transfer file {destination!r} to source.",
-                    details=f"Failed to execute: {quoted_command}\nReturn code:{proc.returncode}",
-                )
+        if proc.returncode != 0:
+            raise MultipassError(
+                brief=f"Failed to transfer file to destination {destination!r}.",
+                details=errors.details_from_command_error(
+                    cmd=command, stderr=stderr, returncode=proc.returncode
+                ),
+            )
 
     def umount(self, *, mount: str) -> None:
         """Unmount target in VM.
