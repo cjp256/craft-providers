@@ -14,7 +14,7 @@
 
 """Multipass provider support package."""
 
-from .errors import MultipassError  # noqa: F401
+from .errors import MultipassError, MultipassInstallerError  # noqa: F401
 from .multipass import Multipass  # noqa: F401
 from .multipass_instance import MultipassInstance  # noqa: F401
 from .multipass_provider import MultipassProvider  # noqa: F401

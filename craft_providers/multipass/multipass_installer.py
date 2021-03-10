@@ -37,13 +37,13 @@ def find_multipass() -> Optional[pathlib.Path]:
     :returns: Path to multipass executable.  If executable not found, path
                 is /snap/bin/multipass.
     """
+    bin_name = "multipass"
+    fallback = pathlib.Path("multipass")
+
     if sys.platform == "win32":
         bin_name = "multipass.exe"
-    else:
-        bin_name = "multipass"
-
-    # TODO: platform-specific sane options
-    fallback = pathlib.Path("/snap/bin/multipass")
+    elif sys.platform == "linux":
+        fallback = pathlib.Path("/snap/bin/multipass")
 
     bin_path = path.which(bin_name)
     if bin_path is None and fallback.exists():
@@ -57,21 +57,12 @@ def find_multipass() -> Optional[pathlib.Path]:
 
 def _get_version(*, multipass_path: pathlib.Path) -> Optional[str]:
     """Get multipass version."""
-    _wait_until_ready(multipass_path=multipass_path)
-
-    proc = subprocess.run(
-        [str(multipass_path), "version"],
-        check=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
+    stdout = _wait_until_ready(multipass_path=multipass_path)
 
     # Split should look like ['multipass', '1.5.0', 'multipassd', '1.5.0'].
-    output_split = proc.stdout.decode().split()
+    output_split = stdout.split()
     if len(output_split) != 4:
-        logger.warning(
-            "unable to parse Multipass version output %r", proc.stdout.decode()
-        )
+        logger.warning("unable to parse Multipass version output %r", stdout.decode())
         return None
 
     return output_split[1]
@@ -90,7 +81,7 @@ def _wait_until_ready(
     multipass_path: pathlib.Path,
     retry_interval: float = 1.0,
     retry_count: int = 120,
-) -> None:
+) -> str:
     while retry_count > 0:
         proc = subprocess.run(
             [str(multipass_path), "version"],
@@ -100,11 +91,13 @@ def _wait_until_ready(
         )
 
         # "multipass" may show up before "multipassd".
-        if "multipassd" in proc.stdout.decode():
-            return
+        if b"multipassd" in proc.stdout:
+            return proc.stdout.decode()
 
         retry_count -= 1
         sleep(retry_interval)
+
+    raise MultipassInstallerError("timed out waiting for multipass to get ready")
 
 
 def _install_darwin() -> None:
@@ -146,12 +139,16 @@ def is_installed() -> bool:
     return multipass_path is not None and multipass_path.exists()
 
 
-def install(*, platform=sys.platform) -> pathlib.Path:
+def install(*, platform: Optional[str] = None) -> pathlib.Path:
     """Ensure Multipass is installed with required version.
 
     :raises MultipassInstallerError: if unsupported.
     """
+    if platform is None:
+        platform = sys.platform
+
     if not is_installed():
+        logger.warning(f"platform={platform}")
         if platform == "darwin":
             _install_darwin()
         elif platform == "linux":

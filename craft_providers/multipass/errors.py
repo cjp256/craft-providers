@@ -33,7 +33,7 @@ class MultipassInstallerError(MultipassError):
     def __init__(
         self, reason: str, error: Optional[subprocess.CalledProcessError] = None
     ) -> None:
-        brief = f"Failed to install Multipass: {reason}"
+        brief = f"Failed to install Multipass: {reason}."
         resolution = "Please visit https://multipass.run/ for instructions on installing Multipass for your operating system."
 
         if error:
