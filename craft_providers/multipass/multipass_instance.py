@@ -24,50 +24,46 @@ from typing import Any, Dict, List, Optional
 from craft_providers.actions import linux
 
 from .. import Executor
+from .errors import MultipassError
 from .multipass import Multipass
 
 logger = logging.getLogger(__name__)
 
 
-class MultipassInstanceError(Exception):
-    """Unexpected error operating on VM.
+def _get_host_uid():
+    if sys.platform == "win32":
+        return 0
+    else:
+        return os.getuid()
 
-    :param msg: Error description.
-    """
 
-    def __init__(self, msg: str) -> None:
-        super().__init__()
-
-        self.msg = msg
-
-    def __str__(self) -> str:
-        return self.msg
+def _get_host_gid():
+    if sys.platform == "win32":
+        return 0
+    else:
+        return os.getgid()
 
 
 class MultipassInstance(Executor):
-    """Multipass Instance Lifecycle."""
+    """Multipass Instance Lifecycle.
+
+    :param name: Name of multipass instance.
+    """
 
     def __init__(
         self,
         *,
         name: str,
         multipass: Optional[Multipass] = None,
-        host_gid: int = os.getuid(),
-        host_uid: int = os.getgid(),
-        platform: str = sys.platform,
     ):
         super().__init__()
 
         self.name = name
-        self._host_gid = host_gid
-        self._host_uid = host_uid
 
         if multipass is not None:
             self._multipass = multipass
         else:
             self._multipass = Multipass()
-
-        self._platform = platform
 
     def create_file(
         self,
@@ -192,7 +188,7 @@ class MultipassInstance(Executor):
         :returns: State information parsed from multipass if instance exists,
             else None.
 
-        :raises MultipassInstanceError: If unable to parse VM info.
+        :raises MultipassError: If unable to parse VM info.
         """
         instance_config = self._multipass.info(instance_name=self.name)
         if instance_config is None:
@@ -210,7 +206,7 @@ class MultipassInstance(Executor):
         """
         info = self.get_info()
         if info is None:
-            raise MultipassInstanceError(f"VM no longer exists {self.name!r}.")
+            raise MultipassError(f"VM no longer exists {self.name!r}.")
 
         mounts = info.get("mounts", dict())
 
@@ -258,7 +254,14 @@ class MultipassInstance(Executor):
             mem=f"{mem_gb!s}G",
         )
 
-    def mount(self, *, host_source: pathlib.Path, target: pathlib.Path) -> None:
+    def mount(
+        self,
+        *,
+        host_source: pathlib.Path,
+        target: pathlib.Path,
+        host_uid: int = _get_host_uid(),
+        host_gid: int = _get_host_gid(),
+    ) -> None:
         """Mount host host_source directory to target mount point.
 
         Checks first to see if already mounted.
@@ -269,12 +272,8 @@ class MultipassInstance(Executor):
         if self.is_mounted(host_source=host_source, target=target):
             return
 
-        if self._platform == "win32":
-            uid_map = {"0": "0"}
-            gid_map = {"0": "0"}
-        else:
-            uid_map = {str(self._host_uid): "0"}
-            gid_map = {str(self._host_gid): "0"}
+        uid_map = {str(host_uid): "0"}
+        gid_map = {str(host_gid): "0"}
 
         self._multipass.mount(
             source=host_source,
@@ -296,7 +295,6 @@ class MultipassInstance(Executor):
         """
         logger.debug("Syncing env:%s -> host:%s...", source, destination)
 
-        # TODO: check if mount makes source == destination, skip if so.
         if not linux.is_target_file(executor=self, target=source):
             raise FileNotFoundError(f"File not found: {str(destination)!r}")
 
