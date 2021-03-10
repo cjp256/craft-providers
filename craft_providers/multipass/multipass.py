@@ -111,7 +111,7 @@ class Multipass:
         try:
             proc = self._run(command, capture_output=True, check=True)
         except subprocess.CalledProcessError as error:
-            if "does not exist" in error.stdout.decode():
+            if b"does not exist" in error.stderr:
                 return None
 
             raise MultipassError.from_called_process_error(

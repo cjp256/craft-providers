@@ -158,7 +158,7 @@ def test_info(fake_process):
 def test_info_no_vm(fake_process):
     fake_process.register_subprocess(
         ["multipass", "info", "test-instance", "--format", "json"],
-        stdout='info failed: The following errors occurred:\ninstance "foo" does not exist',
+        stderr='info failed: The following errors occurred:\ninstance "foo" does not exist',
         returncode=1,
     )
 
