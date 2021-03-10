@@ -206,7 +206,7 @@ class MultipassInstance(Executor):
         """
         info = self.get_info()
         if info is None:
-            raise MultipassError(f"VM no longer exists {self.name!r}.")
+            raise MultipassError(brief=f"VM {self.name!r} was deleted.")
 
         mounts = info.get("mounts", dict())
 
@@ -259,8 +259,8 @@ class MultipassInstance(Executor):
         *,
         host_source: pathlib.Path,
         target: pathlib.Path,
-        host_uid: int = _get_host_uid(),
-        host_gid: int = _get_host_gid(),
+        host_uid: Optional[int] = None,
+        host_gid: Optional[int] = None,
     ) -> None:
         """Mount host host_source directory to target mount point.
 
@@ -272,7 +272,14 @@ class MultipassInstance(Executor):
         if self.is_mounted(host_source=host_source, target=target):
             return
 
+        if host_uid is None:
+            host_uid = _get_host_uid()
+
         uid_map = {str(host_uid): "0"}
+
+        if host_gid is None:
+            host_gid = _get_host_gid()
+
         gid_map = {str(host_gid): "0"}
 
         self._multipass.mount(
@@ -296,7 +303,7 @@ class MultipassInstance(Executor):
         logger.debug("Syncing env:%s -> host:%s...", source, destination)
 
         if not linux.is_target_file(executor=self, target=source):
-            raise FileNotFoundError(f"File not found: {str(destination)!r}")
+            raise FileNotFoundError(f"File not found: {str(source)!r}")
 
         if not destination.parent.is_dir():
             raise FileNotFoundError(f"Directory not found: {str(destination.parent)!r}")
@@ -317,10 +324,10 @@ class MultipassInstance(Executor):
         :raises ProviderError: On error copying file.
         """
         if not source.is_file():
-            raise FileNotFoundError(f"File not found: {str(destination)!r}")
+            raise FileNotFoundError(f"File not found: {str(source)!r}")
 
         if not linux.is_target_directory(executor=self, target=destination.parent):
-            raise FileNotFoundError(f"Directory no found: {str(destination.parent)!r}")
+            raise FileNotFoundError(f"Directory not found: {str(destination.parent)!r}")
 
         self._multipass.transfer(
             source=str(source),
