@@ -16,7 +16,7 @@
 import dataclasses
 import shlex
 import subprocess
-from typing import List, Optional, Union
+from typing import List, Optional, Type, Union
 
 
 def details_from_command_error(
@@ -71,6 +71,19 @@ def details_from_called_process_error(
     )
 
 
+def _fix_dataclass_init_docs(cls: Type) -> Type:
+    """Temporary fix until sphinx autodoc supports dataclasses.
+
+    :param cls: The class whose docstring needs fixing
+    :returns: The class that was passed so this function can be used as a decorator
+
+    .. seealso:: https://github.com/agronholm/sphinx-autodoc-typehints/issues/123
+    """
+    cls.__init__.__qualname__ = f'{cls.__name__}.__init__'
+    return cls
+
+
+@_fix_dataclass_init_docs
 @dataclasses.dataclass
 class ProviderError(Exception):
     """Unexpected error.
