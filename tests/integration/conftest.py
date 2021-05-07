@@ -23,7 +23,7 @@ import tempfile
 
 import pytest
 
-from craft_providers import lxd, multipass
+from craft_providers import bases, lxd, multipass
 
 
 def generate_instance_name():
@@ -142,3 +142,22 @@ def uninstalled_multipass():
     # Ensure it is installed after test.
     if not multipass.is_installed():
         multipass.install()
+
+
+@pytest.fixture()
+def core20_lxd_instance(instance_name):
+    """Fully configured buildd-based core20 LXD instance."""
+    base_configuration = bases.BuilddBase(alias=bases.BuilddBaseAlias.FOCAL)
+
+    instance = lxd.launch(
+        name=instance_name,
+        base_configuration=base_configuration,
+        image_name="20.04",
+        image_remote="ubuntu",
+        ephemeral=True,
+    )
+
+    yield instance
+
+    if instance.exists():
+        instance.delete()
