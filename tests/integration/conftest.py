@@ -13,9 +13,12 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 """Fixtures for integration tests."""
+
+import contextlib
 import os
 import pathlib
 import random
+import shutil
 import string
 import subprocess
 import sys
@@ -161,3 +164,32 @@ def core20_lxd_instance(instance_name):
 
     if instance.exists():
         instance.delete()
+
+
+@pytest.fixture()
+def installed_snap():
+    """Fixture to provide contextmanager to install a specified snap.
+
+    If a snap is not installed, it would be installed automatically with:
+    CRAFT_PROVIDERS_TESTS_ENABLE_SNAP_INSTALL=1
+    """
+
+    @contextlib.contextmanager
+    def _installed_snap(snap_name):
+        """Ensure snap is installed, or skip test."""
+        if shutil.which("snap") is None or sys.platform != "linux":
+            pytest.skip("requires linux and snapd")
+
+        if os.path.exists(f"/snap/{snap_name}/current"):
+            # Already installed, nothing to do.
+            yield
+        else:
+            # Install it, if enabled to do so by environment.
+            if not os.environ.get("CRAFT_PROVIDERS_TESTS_ENABLE_SNAP_INSTALL") == "1":
+                pytest.skip(f"{snap_name!r} snap not installed, skipped")
+
+            subprocess.run(["sudo", "snap", "install", snap_name], check=True)
+            yield
+            subprocess.run(["sudo", "snap", "remove", snap_name], check=True)
+
+    return _installed_snap
