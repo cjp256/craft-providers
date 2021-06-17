@@ -259,6 +259,37 @@ def test_execute_run_with_env_unset(mock_lxc, instance):
     ]
 
 
+def test_execute_run_without_sudo_wrapper(mock_lxc, instance):
+    instance.use_sudo_wrapper = False
+    instance.execute_run(command=["test-command", "flags"], input="foo")
+
+    assert mock_lxc.mock_calls == [
+        mock.call.exec(
+            instance_name="test-instance",
+            command=["test-command", "flags"],
+            project=instance.project,
+            remote=instance.remote,
+            runner=subprocess.run,
+            input="foo",
+        )
+    ]
+
+
+def test_execute_run_without_sudo_wrapper_with_env(mock_lxc, instance):
+    instance.use_sudo_wrapper = False
+    instance.execute_run(command=["test-command", "flags"], env=dict(foo="bar"))
+
+    assert mock_lxc.mock_calls == [
+        mock.call.exec(
+            instance_name="test-instance",
+            command=["env", "foo=bar", "test-command", "flags"],
+            project=instance.project,
+            remote=instance.remote,
+            runner=subprocess.run,
+        )
+    ]
+
+
 def test_exists(mock_lxc, instance):
     assert instance.exists() is True
     assert mock_lxc.mock_calls == [

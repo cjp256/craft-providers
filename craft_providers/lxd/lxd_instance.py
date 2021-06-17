@@ -37,6 +37,7 @@ def _rootify_lxc_command(
     command: List[str],
     *,
     env: Optional[Dict[str, Optional[str]]] = None,
+    use_sudo: bool = True,
 ) -> List[str]:
     """Wrap a command to run as root with specified environment.
 
@@ -52,15 +53,19 @@ def _rootify_lxc_command(
 
     :param command: Command to execute.
     :param env: Additional environment flags to set.
+    :param use_sudo: Use sudo.
 
     :returns: List of command strings for multipass exec.
     """
-    sudo_cmd = ["sudo", "-H", "--"]
+    if use_sudo:
+        cmd_wrapper = ["sudo", "-H", "--"]
+    else:
+        cmd_wrapper = []
 
     if env is not None:
-        sudo_cmd += env_cmd.formulate_command(env)
+        cmd_wrapper += env_cmd.formulate_command(env)
 
-    return sudo_cmd + command
+    return cmd_wrapper + command
 
 
 class LXDInstance(Executor):
@@ -73,6 +78,7 @@ class LXDInstance(Executor):
         project: str = "default",
         remote: str = "local",
         lxc: Optional[LXC] = None,
+        use_sudo_wrapper: bool = True,
     ):
         super().__init__()
 
@@ -84,6 +90,8 @@ class LXDInstance(Executor):
             self.lxc = LXC()
         else:
             self.lxc = lxc
+
+        self.use_sudo_wrapper = use_sudo_wrapper
 
     def push_file_io(
         self,
@@ -167,7 +175,9 @@ class LXDInstance(Executor):
         """
         return self.lxc.exec(
             instance_name=self.name,
-            command=_rootify_lxc_command(command=command, env=env),
+            command=_rootify_lxc_command(
+                command=command, env=env, use_sudo=self.use_sudo_wrapper
+            ),
             project=self.project,
             remote=self.remote,
             runner=subprocess.Popen,
@@ -197,7 +207,9 @@ class LXDInstance(Executor):
         """
         return self.lxc.exec(
             instance_name=self.name,
-            command=_rootify_lxc_command(command=command, env=env),
+            command=_rootify_lxc_command(
+                command=command, env=env, use_sudo=self.use_sudo_wrapper
+            ),
             project=self.project,
             remote=self.remote,
             runner=subprocess.run,
