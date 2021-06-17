@@ -256,6 +256,7 @@ class BuilddBase(Base):
             executor=executor, deadline=deadline, retry_wait=retry_wait
         )
         self._setup_apt(executor=executor, deadline=deadline)
+        self._setup_sudo(executor=executor, deadline=deadline)
         self._setup_snapd(executor=executor, deadline=deadline)
 
     def _setup_apt(self, *, executor: Executor, deadline: Optional[float]) -> None:
@@ -467,6 +468,7 @@ class BuilddBase(Base):
                     "install",
                     "-y",
                     "fuse",
+                    "udev",
                 ],
                 check=True,
                 capture_output=True,
@@ -518,6 +520,25 @@ class BuilddBase(Base):
         except subprocess.CalledProcessError as error:
             raise BaseConfigurationError(
                 brief="Failed to setup snapd.",
+                details=errors.details_from_called_process_error(error),
+            ) from error
+
+    def _setup_sudo(self, *, executor: Executor, deadline: Optional[float]) -> None:
+        """Install & configure sudo.
+
+        :param executor: Executor for target container.
+        :param deadline: Optional time.time() deadline.
+        """
+        _check_deadline(deadline)
+        try:
+            executor.execute_run(
+                ["apt-get", "install", "-y", "sudo"],
+                capture_output=True,
+                check=True,
+            )
+        except subprocess.CalledProcessError as error:
+            raise BaseConfigurationError(
+                brief="Failed to install sudo.",
                 details=errors.details_from_called_process_error(error),
             ) from error
 
